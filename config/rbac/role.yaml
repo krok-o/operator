@@ -1,0 +1,59 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - delivery.krok.app
+  resources:
+  - commands
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - delivery.krok.app
+  resources:
+  - commands/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - delivery.krok.app
+  resources:
+  - commands/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - delivery.krok.app
+  resources:
+  - repositories
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - delivery.krok.app
+  resources:
+  - repositories/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - delivery.krok.app
+  resources:
+  - repositories/status
+  verbs:
+  - get
+  - patch
+  - update

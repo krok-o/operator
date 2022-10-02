@@ -20,22 +20,40 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// GitLab contains GitLab specific settings.
+type GitLab struct {
+	// ProjectID is an optional ID which defines a project in Gitlab.
+	ProjectID int `json:"projectID,omitempty"`
+}
 
 // RepositorySpec defines the desired state of Repository
 type RepositorySpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of Repository. Edit repository_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// Name of the repository.
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+	// URL of the repository.
+	// +kubebuilder:validation:Required
+	URL string `json:"url"`
+	// VCS Defines which handler will be used. For values, see platforms.go.
+	// +kubebuilder:validation:Required
+	VCS int `json:"vcs"`
+	// GitLab specific settings.
+	// +optional
+	GitLab *GitLab `json:"gitLab,omitempty"`
+	// AuthSecretRef contains the ref to the secret containing authentication data for this repository.
+	// +kubebuilder:validation:Required
+	AuthSecretRef string `json:"auth,omitempty"`
+	// Commands contains all the commands which this repository is attached to.
+	// +optional
+	Commands *CommandList `json:"commands,omitempty"`
 }
 
 // RepositoryStatus defines the observed state of Repository
 type RepositoryStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// required: true
+	UniqueURL string `json:"unique_url,omitempty"`
+	// Events contains all events that are being executed or were executed for this repository.
+	Events []string `json:"events,omitempty"`
 }
 
 //+kubebuilder:object:root=true
