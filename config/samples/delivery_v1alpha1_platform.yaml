@@ -1,0 +1,12 @@
+apiVersion: delivery.krok.app/v1alpha1
+kind: Platform
+metadata:
+  labels:
+    app.kubernetes.io/name: platform
+    app.kubernetes.io/instance: platform-sample
+    app.kubernetes.io/part-of: operator
+    app.kuberentes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: operator
+  name: platform-sample
+spec:
+  # TODO(user): Add fields here

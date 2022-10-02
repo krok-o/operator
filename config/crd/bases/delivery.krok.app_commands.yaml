@@ -35,10 +35,468 @@ spec:
           spec:
             description: CommandSpec defines the desired state of Command
             properties:
-              foo:
-                description: Foo is an example field of Command. Edit command_types.go
-                  to remove/update
+              enabled:
+                description: Enabled defines if this command can be executed or not.
+                type: boolean
+              image:
+                description: 'Image defines the image name and tag of the command
+                  example: krok-hook/slack-notification:v0.0.1'
                 type: string
+              name:
+                description: Name of the command.
+                type: string
+              platforms:
+                description: Platforms holds all the platforms which this command
+                  supports.
+                properties:
+                  apiVersion:
+                    description: 'APIVersion defines the versioned schema of this
+                      representation of an object. Servers should convert recognized
+                      schemas to the latest internal value, and may reject unrecognized
+                      values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+                    type: string
+                  items:
+                    items:
+                      description: Platform is the Schema for the platforms API
+                      properties:
+                        apiVersion:
+                          description: 'APIVersion defines the versioned schema of
+                            this representation of an object. Servers should convert
+                            recognized schemas to the latest internal value, and may
+                            reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+                          type: string
+                        kind:
+                          description: 'Kind is a string value representing the REST
+                            resource this object represents. Servers may infer this
+                            from the endpoint the client submits requests to. Cannot
+                            be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+                          type: string
+                        metadata:
+                          type: object
+                        spec:
+                          description: PlatformSpec defines the desired state of Platform
+                          properties:
+                            id:
+                              description: ID identifies the platform. This is a given.
+                              type: integer
+                            name:
+                              description: Name gives a human-readable name to a platform.
+                              enum:
+                              - github
+                              - gitlab
+                              type: string
+                          required:
+                          - id
+                          - name
+                          type: object
+                        status:
+                          description: PlatformStatus defines the observed state of
+                            Platform
+                          type: object
+                      type: object
+                    type: array
+                  kind:
+                    description: 'Kind is a string value representing the REST resource
+                      this object represents. Servers may infer this from the endpoint
+                      the client submits requests to. Cannot be updated. In CamelCase.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+                    type: string
+                  metadata:
+                    description: ListMeta describes metadata that synthetic resources
+                      must have, including lists and various status objects. A resource
+                      may have only one of {ObjectMeta, ListMeta}.
+                    properties:
+                      continue:
+                        description: continue may be set if the user set a limit on
+                          the number of items returned, and indicates that the server
+                          has more data available. The value is opaque and may be
+                          used to issue another request to the endpoint that served
+                          this list to retrieve the next set of available objects.
+                          Continuing a consistent list may not be possible if the
+                          server configuration has changed or more than a few minutes
+                          have passed. The resourceVersion field returned when using
+                          this continue value will be identical to the value in the
+                          first response, unless you have received this token from
+                          an error message.
+                        type: string
+                      remainingItemCount:
+                        description: remainingItemCount is the number of subsequent
+                          items in the list which are not included in this list response.
+                          If the list request contained label or field selectors,
+                          then the number of remaining items is unknown and the field
+                          will be left unset and omitted during serialization. If
+                          the list is complete (either because it is not chunking
+                          or because this is the last chunk), then there are no more
+                          remaining items and this field will be left unset and omitted
+                          during serialization. Servers older than v1.15 do not set
+                          this field. The intended use of the remainingItemCount is
+                          *estimating* the size of a collection. Clients should not
+                          rely on the remainingItemCount to be set or to be exact.
+                        format: int64
+                        type: integer
+                      resourceVersion:
+                        description: 'String that identifies the server''s internal
+                          version of this object that can be used by clients to determine
+                          when objects have changed. Value must be treated as opaque
+                          by clients and passed unmodified back to the server. Populated
+                          by the system. Read-only. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency'
+                        type: string
+                      selfLink:
+                        description: 'Deprecated: selfLink is a legacy read-only field
+                          that is no longer populated by the system.'
+                        type: string
+                    type: object
+                required:
+                - items
+                type: object
+              repositories:
+                description: Repositories that this command can execute on.
+                properties:
+                  apiVersion:
+                    description: 'APIVersion defines the versioned schema of this
+                      representation of an object. Servers should convert recognized
+                      schemas to the latest internal value, and may reject unrecognized
+                      values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+                    type: string
+                  items:
+                    items:
+                      description: Repository is the Schema for the repositories API
+                      properties:
+                        apiVersion:
+                          description: 'APIVersion defines the versioned schema of
+                            this representation of an object. Servers should convert
+                            recognized schemas to the latest internal value, and may
+                            reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+                          type: string
+                        kind:
+                          description: 'Kind is a string value representing the REST
+                            resource this object represents. Servers may infer this
+                            from the endpoint the client submits requests to. Cannot
+                            be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+                          type: string
+                        metadata:
+                          type: object
+                        spec:
+                          description: RepositorySpec defines the desired state of
+                            Repository
+                          properties:
+                            auth:
+                              description: AuthSecretRef contains the ref to the secret
+                                containing authentication data for this repository.
+                              type: string
+                            commands:
+                              description: Commands contains all the commands which
+                                this repository is attached to.
+                              properties:
+                                apiVersion:
+                                  description: 'APIVersion defines the versioned schema
+                                    of this representation of an object. Servers should
+                                    convert recognized schemas to the latest internal
+                                    value, and may reject unrecognized values. More
+                                    info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+                                  type: string
+                                items:
+                                  items:
+                                    description: Command is the Schema for the commands
+                                      API
+                                    properties:
+                                      apiVersion:
+                                        description: 'APIVersion defines the versioned
+                                          schema of this representation of an object.
+                                          Servers should convert recognized schemas
+                                          to the latest internal value, and may reject
+                                          unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+                                        type: string
+                                      kind:
+                                        description: 'Kind is a string value representing
+                                          the REST resource this object represents.
+                                          Servers may infer this from the endpoint
+                                          the client submits requests to. Cannot be
+                                          updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+                                        type: string
+                                      metadata:
+                                        type: object
+                                      spec: {}
+                                      status:
+                                        description: CommandStatus defines the observed
+                                          state of Command
+                                        type: object
+                                    type: object
+                                  type: array
+                                kind:
+                                  description: 'Kind is a string value representing
+                                    the REST resource this object represents. Servers
+                                    may infer this from the endpoint the client submits
+                                    requests to. Cannot be updated. In CamelCase.
+                                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+                                  type: string
+                                metadata:
+                                  description: ListMeta describes metadata that synthetic
+                                    resources must have, including lists and various
+                                    status objects. A resource may have only one of
+                                    {ObjectMeta, ListMeta}.
+                                  properties:
+                                    continue:
+                                      description: continue may be set if the user
+                                        set a limit on the number of items returned,
+                                        and indicates that the server has more data
+                                        available. The value is opaque and may be
+                                        used to issue another request to the endpoint
+                                        that served this list to retrieve the next
+                                        set of available objects. Continuing a consistent
+                                        list may not be possible if the server configuration
+                                        has changed or more than a few minutes have
+                                        passed. The resourceVersion field returned
+                                        when using this continue value will be identical
+                                        to the value in the first response, unless
+                                        you have received this token from an error
+                                        message.
+                                      type: string
+                                    remainingItemCount:
+                                      description: remainingItemCount is the number
+                                        of subsequent items in the list which are
+                                        not included in this list response. If the
+                                        list request contained label or field selectors,
+                                        then the number of remaining items is unknown
+                                        and the field will be left unset and omitted
+                                        during serialization. If the list is complete
+                                        (either because it is not chunking or because
+                                        this is the last chunk), then there are no
+                                        more remaining items and this field will be
+                                        left unset and omitted during serialization.
+                                        Servers older than v1.15 do not set this field.
+                                        The intended use of the remainingItemCount
+                                        is *estimating* the size of a collection.
+                                        Clients should not rely on the remainingItemCount
+                                        to be set or to be exact.
+                                      format: int64
+                                      type: integer
+                                    resourceVersion:
+                                      description: 'String that identifies the server''s
+                                        internal version of this object that can be
+                                        used by clients to determine when objects
+                                        have changed. Value must be treated as opaque
+                                        by clients and passed unmodified back to the
+                                        server. Populated by the system. Read-only.
+                                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency'
+                                      type: string
+                                    selfLink:
+                                      description: 'Deprecated: selfLink is a legacy
+                                        read-only field that is no longer populated
+                                        by the system.'
+                                      type: string
+                                  type: object
+                              required:
+                              - items
+                              type: object
+                            gitLab:
+                              description: GitLab specific settings.
+                              properties:
+                                projectID:
+                                  description: ProjectID is an optional ID which defines
+                                    a project in Gitlab.
+                                  type: integer
+                              type: object
+                            name:
+                              description: Name of the repository.
+                              type: string
+                            url:
+                              description: URL of the repository.
+                              type: string
+                            vcs:
+                              description: VCS Defines which handler will be used.
+                                For values, see platforms.go.
+                              type: integer
+                          required:
+                          - name
+                          - url
+                          - vcs
+                          type: object
+                        status:
+                          description: RepositoryStatus defines the observed state
+                            of Repository
+                          properties:
+                            events:
+                              description: Events contains all events that are being
+                                executed or were executed for this repository.
+                              properties:
+                                apiVersion:
+                                  description: 'APIVersion defines the versioned schema
+                                    of this representation of an object. Servers should
+                                    convert recognized schemas to the latest internal
+                                    value, and may reject unrecognized values. More
+                                    info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+                                  type: string
+                                items:
+                                  items:
+                                    description: Event is the Schema for the events
+                                      API
+                                    properties:
+                                      apiVersion:
+                                        description: 'APIVersion defines the versioned
+                                          schema of this representation of an object.
+                                          Servers should convert recognized schemas
+                                          to the latest internal value, and may reject
+                                          unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+                                        type: string
+                                      kind:
+                                        description: 'Kind is a string value representing
+                                          the REST resource this object represents.
+                                          Servers may infer this from the endpoint
+                                          the client submits requests to. Cannot be
+                                          updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+                                        type: string
+                                      metadata:
+                                        type: object
+                                      spec:
+                                        description: EventSpec defines the desired
+                                          state of Event
+                                        properties:
+                                          foo:
+                                            description: Foo is an example field of
+                                              Event. Edit event_types.go to remove/update
+                                            type: string
+                                        type: object
+                                      status:
+                                        description: EventStatus defines the observed
+                                          state of Event
+                                        type: object
+                                    type: object
+                                  type: array
+                                kind:
+                                  description: 'Kind is a string value representing
+                                    the REST resource this object represents. Servers
+                                    may infer this from the endpoint the client submits
+                                    requests to. Cannot be updated. In CamelCase.
+                                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+                                  type: string
+                                metadata:
+                                  description: ListMeta describes metadata that synthetic
+                                    resources must have, including lists and various
+                                    status objects. A resource may have only one of
+                                    {ObjectMeta, ListMeta}.
+                                  properties:
+                                    continue:
+                                      description: continue may be set if the user
+                                        set a limit on the number of items returned,
+                                        and indicates that the server has more data
+                                        available. The value is opaque and may be
+                                        used to issue another request to the endpoint
+                                        that served this list to retrieve the next
+                                        set of available objects. Continuing a consistent
+                                        list may not be possible if the server configuration
+                                        has changed or more than a few minutes have
+                                        passed. The resourceVersion field returned
+                                        when using this continue value will be identical
+                                        to the value in the first response, unless
+                                        you have received this token from an error
+                                        message.
+                                      type: string
+                                    remainingItemCount:
+                                      description: remainingItemCount is the number
+                                        of subsequent items in the list which are
+                                        not included in this list response. If the
+                                        list request contained label or field selectors,
+                                        then the number of remaining items is unknown
+                                        and the field will be left unset and omitted
+                                        during serialization. If the list is complete
+                                        (either because it is not chunking or because
+                                        this is the last chunk), then there are no
+                                        more remaining items and this field will be
+                                        left unset and omitted during serialization.
+                                        Servers older than v1.15 do not set this field.
+                                        The intended use of the remainingItemCount
+                                        is *estimating* the size of a collection.
+                                        Clients should not rely on the remainingItemCount
+                                        to be set or to be exact.
+                                      format: int64
+                                      type: integer
+                                    resourceVersion:
+                                      description: 'String that identifies the server''s
+                                        internal version of this object that can be
+                                        used by clients to determine when objects
+                                        have changed. Value must be treated as opaque
+                                        by clients and passed unmodified back to the
+                                        server. Populated by the system. Read-only.
+                                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency'
+                                      type: string
+                                    selfLink:
+                                      description: 'Deprecated: selfLink is a legacy
+                                        read-only field that is no longer populated
+                                        by the system.'
+                                      type: string
+                                  type: object
+                              required:
+                              - items
+                              type: object
+                            unique_url:
+                              description: A Unique URL for this given repository.
+                                Generated upon creation and saved in Status field.
+                              type: string
+                          type: object
+                      type: object
+                    type: array
+                  kind:
+                    description: 'Kind is a string value representing the REST resource
+                      this object represents. Servers may infer this from the endpoint
+                      the client submits requests to. Cannot be updated. In CamelCase.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+                    type: string
+                  metadata:
+                    description: ListMeta describes metadata that synthetic resources
+                      must have, including lists and various status objects. A resource
+                      may have only one of {ObjectMeta, ListMeta}.
+                    properties:
+                      continue:
+                        description: continue may be set if the user set a limit on
+                          the number of items returned, and indicates that the server
+                          has more data available. The value is opaque and may be
+                          used to issue another request to the endpoint that served
+                          this list to retrieve the next set of available objects.
+                          Continuing a consistent list may not be possible if the
+                          server configuration has changed or more than a few minutes
+                          have passed. The resourceVersion field returned when using
+                          this continue value will be identical to the value in the
+                          first response, unless you have received this token from
+                          an error message.
+                        type: string
+                      remainingItemCount:
+                        description: remainingItemCount is the number of subsequent
+                          items in the list which are not included in this list response.
+                          If the list request contained label or field selectors,
+                          then the number of remaining items is unknown and the field
+                          will be left unset and omitted during serialization. If
+                          the list is complete (either because it is not chunking
+                          or because this is the last chunk), then there are no more
+                          remaining items and this field will be left unset and omitted
+                          during serialization. Servers older than v1.15 do not set
+                          this field. The intended use of the remainingItemCount is
+                          *estimating* the size of a collection. Clients should not
+                          rely on the remainingItemCount to be set or to be exact.
+                        format: int64
+                        type: integer
+                      resourceVersion:
+                        description: 'String that identifies the server''s internal
+                          version of this object that can be used by clients to determine
+                          when objects have changed. Value must be treated as opaque
+                          by clients and passed unmodified back to the server. Populated
+                          by the system. Read-only. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency'
+                        type: string
+                      selfLink:
+                        description: 'Deprecated: selfLink is a legacy read-only field
+                          that is no longer populated by the system.'
+                        type: string
+                    type: object
+                required:
+                - items
+                type: object
+              schedule:
+                description: 'Schedule of the command. example: 0 * * * * // follows
+                  cron job syntax.'
+                type: string
+            required:
+            - image
+            - name
             type: object
           status:
             description: CommandStatus defines the observed state of Command

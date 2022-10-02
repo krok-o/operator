@@ -20,22 +20,28 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// EventRef is a reference to an event.
+type EventRef struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+}
 
 // CommandRunSpec defines the desired state of CommandRun
 type CommandRunSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of CommandRun. Edit commandrun_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// EventRef is the ref of the event that this run belongs to.
+	EventRef EventRef `json:"eventRef"`
+	// CommandName is the name of the command that is being executed.
+	CommandName string `json:"commandName"`
 }
 
 // CommandRunStatus defines the observed state of CommandRun
 type CommandRunStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Status is the current state of the command run.
+	// example: created, running, failed, success
+	Status string `json:"status"`
+	// Outcome is any output of the command. Stdout and stderr combined.
+	// +optional
+	Outcome string `json:"outcome,omitempty"`
 }
 
 //+kubebuilder:object:root=true

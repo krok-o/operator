@@ -25,17 +25,35 @@ import (
 
 // CommandSpec defines the desired state of Command
 type CommandSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of Command. Edit command_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// Name of the command.
+	Name string `json:"name"`
+	// Schedule of the command.
+	// example: 0 * * * * // follows cron job syntax.
+	// +optional
+	Schedule string `json:"schedule,omitempty"`
+	// Repositories that this command can execute on.
+	// +optional
+	Repositories RepositoryList `json:"repositories,omitempty"`
+	// Image defines the image name and tag of the command
+	// example: krok-hook/slack-notification:v0.0.1
+	Image string `json:"image"`
+	// Enabled defines if this command can be executed or not.
+	// +optional
+	Enabled bool `json:"enabled"`
+	// Platforms holds all the platforms which this command supports.
+	// +optional
+	Platforms PlatformList `json:"platforms,omitempty"`
+	// RequiresClone defines if this command wants to clone the repository
+	// and thus, requires auth information from the repository (which should have it).
+	//
+	// required: false
+	// TODO: Think about this. Maybe use GitRepository or Flux to reconcile the source so every command has
+	// access to it implicitly.
+	//RequiresClone bool `json:"requires_clone"`
 }
 
 // CommandStatus defines the observed state of Command
 type CommandStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
 }
 
 //+kubebuilder:object:root=true

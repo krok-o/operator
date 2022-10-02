@@ -51,10 +51,9 @@ type RepositorySpec struct {
 // RepositoryStatus defines the observed state of Repository
 type RepositoryStatus struct {
 	// A Unique URL for this given repository. Generated upon creation and saved in Status field.
-	// required: true
 	UniqueURL string `json:"unique_url,omitempty"`
 	// Events contains all events that are being executed or were executed for this repository.
-	Events []string `json:"events,omitempty"`
+	Events EventList `json:"events,omitempty"`
 }
 
 //+kubebuilder:object:root=true
