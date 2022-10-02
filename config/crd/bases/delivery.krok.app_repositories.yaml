@@ -168,7 +168,8 @@ spec:
                   type: string
                 type: array
               unique_url:
-                description: 'required: true'
+                description: 'A Unique URL for this given repository. Generated upon
+                  creation and saved in Status field. required: true'
                 type: string
             type: object
         type: object
