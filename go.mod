@@ -3,6 +3,7 @@ module github.com/krok-o/operator
 go 1.19
 
 require (
+	github.com/gorilla/mux v1.8.0
 	github.com/onsi/ginkgo/v2 v2.1.4
 	github.com/onsi/gomega v1.19.0
 	k8s.io/apimachinery v0.25.0
