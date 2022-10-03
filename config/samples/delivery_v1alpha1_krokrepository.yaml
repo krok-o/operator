@@ -11,3 +11,6 @@ spec:
     namespace: default
   platform: github
   url: "https://github.com/Skarlso/test"
+  events:
+    - push
+    - pull
