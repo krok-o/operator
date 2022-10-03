@@ -63,8 +63,8 @@ func main() {
 	)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.StringVar(&hookServerAddr, "hook-server-bind-address", ":5678", "The address of the hook server.")
-	flag.StringVar(&hookBase, "hook-base-address", "localhost:5678", "The address of the callback that is used.")
+	flag.StringVar(&hookServerAddr, "hook-server-bind-address", ":9998", "The address of the hook server.")
+	flag.StringVar(&hookBase, "hook-base-address", "89.134.172.87:9998", "The address of the callback that is used.")
 	flag.StringVar(&hookProtocol, "hook-protocol", "http", "The protocol at which the hook is running.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
@@ -134,7 +134,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	hookServer := hook.NewServer(hookServerAddr, platformProviders)
+	hookServer := hook.NewServer(hookServerAddr, platformProviders, mgr.GetClient())
 
 	// start the registry
 	go func() {

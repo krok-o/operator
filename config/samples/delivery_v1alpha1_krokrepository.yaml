@@ -2,15 +2,15 @@ apiVersion: delivery.krok.app/v1alpha1
 kind: KrokRepository
 metadata:
   name: repository-sample
+  namespace: krok-system
 spec:
   authSecretRef:
     name: repository-sample-secret
-    namespace: default
+    namespace: krok-system
   providerTokenSecretRef:
     name: github-secret
-    namespace: default
+    namespace: krok-system
   platform: github
   url: "https://github.com/Skarlso/test"
   events:
     - push
-    - pull
