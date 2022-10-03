@@ -134,7 +134,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	hookServer := hook.NewServer(hookServerAddr)
+	hookServer := hook.NewServer(hookServerAddr, platformProviders)
 
 	// start the registry
 	go func() {
