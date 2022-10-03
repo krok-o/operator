@@ -1,0 +1,27 @@
+# permissions for end users to view krokcommandruns.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: krokcommandrun-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: operator
+    app.kubernetes.io/part-of: operator
+    app.kubernetes.io/managed-by: kustomize
+  name: krokcommandrun-viewer-role
+rules:
+- apiGroups:
+  - delivery.krok.app
+  resources:
+  - krokcommandruns
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - delivery.krok.app
+  resources:
+  - krokcommandruns/status
+  verbs:
+  - get

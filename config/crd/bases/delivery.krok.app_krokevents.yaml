@@ -1,0 +1,50 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.9.2
+  creationTimestamp: null
+  name: krokevents.delivery.krok.app
+spec:
+  group: delivery.krok.app
+  names:
+    kind: KrokEvent
+    listKind: KrokEventList
+    plural: krokevents
+    singular: krokevent
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: KrokEvent is the Schema for the krokevents API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: KrokEventSpec defines the desired state of KrokEvent
+            properties:
+              foo:
+                description: Foo is an example field of KrokEvent. Edit krokevent_types.go
+                  to remove/update
+                type: string
+            type: object
+          status:
+            description: KrokEventStatus defines the observed state of KrokEvent
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

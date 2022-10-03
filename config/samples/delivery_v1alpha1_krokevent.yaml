@@ -1,0 +1,12 @@
+apiVersion: delivery.krok.app/v1alpha1
+kind: KrokEvent
+metadata:
+  labels:
+    app.kubernetes.io/name: krokevent
+    app.kubernetes.io/instance: krokevent-sample
+    app.kubernetes.io/part-of: operator
+    app.kuberentes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: operator
+  name: krokevent-sample
+spec:
+  # TODO(user): Add fields here

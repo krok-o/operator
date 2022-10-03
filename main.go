@@ -98,20 +98,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.RepositoryReconciler{
+	if err = (&controllers.KrokRepositoryReconciler{
 		Client:       mgr.GetClient(),
 		Scheme:       mgr.GetScheme(),
 		HookBase:     hookBase,
 		HookProtocol: hookProtocol,
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Repository")
+		setupLog.Error(err, "unable to create controller", "controller", "KrokRepository")
 		os.Exit(1)
 	}
-	if err = (&controllers.CommandReconciler{
+	if err = (&controllers.KrokCommandReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Command")
+		setupLog.Error(err, "unable to create controller", "controller", "KrokCommand")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

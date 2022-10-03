@@ -1,0 +1,19 @@
+apiVersion: delivery.krok.app/v1alpha1
+kind: KrokRepository
+metadata:
+  labels:
+    app.kubernetes.io/name: repository
+    app.kubernetes.io/instance: repository-sample
+    app.kubernetes.io/part-of: operator
+    app.kuberentes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: operator
+  name: repository-sample
+spec:
+  authSecretRef:
+    name: repository-sample-secret
+    namespace: default
+  providerTokenSecretRef:
+    name: github-secret
+    namespace: default
+  platform: github
+  url: "https://github.com/Skarlso/test"
