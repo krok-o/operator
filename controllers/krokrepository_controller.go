@@ -55,7 +55,7 @@ type KrokRepositoryReconciler struct {
 func (r *KrokRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx).WithName("krok-operator")
 	log.V(4).Info("starting reconcile loop")
-	repository := &v1alpha1.Repository{}
+	repository := &v1alpha1.KrokRepository{}
 	if err := r.Client.Get(ctx, req.NamespacedName, repository); err != nil {
 		if apierrors.IsNotFound(err) {
 			// Object not found, return.  Created objects are automatically garbage collected.
@@ -119,7 +119,7 @@ func (r *KrokRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 // generateUniqueCallBackURL takes a repository and generates a unique URL based on the ID and Type of the repo
 // and the configured Krok hostname.
-func (r *KrokRepositoryReconciler) generateUniqueCallBackURL(repo *v1alpha1.Repository) (string, error) {
+func (r *KrokRepositoryReconciler) generateUniqueCallBackURL(repo *v1alpha1.KrokRepository) (string, error) {
 	u, err := url.Parse(fmt.Sprintf("%s://%s", r.HookProtocol, r.HookBase))
 	if err != nil {
 		return "", fmt.Errorf("failed to generate unique URL for repository: %w", err)
