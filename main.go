@@ -21,6 +21,9 @@ import (
 	"os"
 
 	"github.com/krok-o/operator/pkg/hook"
+	"github.com/krok-o/operator/pkg/providers"
+	"github.com/krok-o/operator/pkg/providers/github"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -61,7 +64,7 @@ func main() {
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&hookServerAddr, "hook-server-bind-address", ":5678", "The address of the hook server.")
-	flag.StringVar(&hookBase, "hook-base-address", "localhost", "The address of the callback that is used.")
+	flag.StringVar(&hookBase, "hook-base-address", "localhost:5678", "The address of the callback that is used.")
 	flag.StringVar(&hookProtocol, "hook-protocol", "http", "The protocol at which the hook is running.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
@@ -98,11 +101,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	githubProvider := github.NewGithubPlatformProvider(setupLog)
+
+	platformProviders := make(map[string]providers.Platform)
+	platformProviders[deliveryv1alpha1.GITHUB] = githubProvider
+
 	if err = (&controllers.KrokRepositoryReconciler{
-		Client:       mgr.GetClient(),
-		Scheme:       mgr.GetScheme(),
-		HookBase:     hookBase,
-		HookProtocol: hookProtocol,
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		HookBase:          hookBase,
+		HookProtocol:      hookProtocol,
+		PlatformProviders: platformProviders,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KrokRepository")
 		os.Exit(1)

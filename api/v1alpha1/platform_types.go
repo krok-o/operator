@@ -20,33 +20,16 @@ const (
 	// All the different types of hooks.
 
 	// GITHUB based hooks
-	GITHUB = iota + 1
+	GITHUB = "github"
 	// GITLAB based hooks
-	GITLAB
+	GITLAB = "gitlab"
 	// GITEA based hooks
-	GITEA
+	GITEA = "gitea"
 )
 
-// Platform defines a platform like Github, Gitlab etc.
-type Platform struct {
-	// ID of the platform. This is chosen.
-	ID int `json:"id"`
-	// Name of the platform.
-	Name string `json:"name"`
-}
-
 // SupportedPlatforms a map of supported platforms by Krok.
-var SupportedPlatforms = map[int]Platform{
-	GITHUB: {
-		ID:   GITHUB,
-		Name: "github",
-	},
-	GITLAB: {
-		ID:   GITLAB,
-		Name: "gitlab",
-	},
-	GITEA: {
-		ID:   GITEA,
-		Name: "gitea",
-	},
+var SupportedPlatforms = map[string]struct{}{
+	GITHUB: {},
+	GITLAB: {},
+	GITEA:  {},
 }

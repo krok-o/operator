@@ -53,14 +53,14 @@ type KrokRepositorySpec struct {
 	// Commands contains all the commands which this repository is attached to.
 	// +optional
 	Commands *KrokCommandList `json:"commands,omitempty"`
+	// Events contains all events that this repository subscribes to.
+	Events []string `json:"events,omitempty"`
 }
 
 // KrokRepositoryStatus defines the observed state of KrokRepository
 type KrokRepositoryStatus struct {
 	// A Unique URL for this given repository. Generated upon creation and saved in Status field.
 	UniqueURL string `json:"uniqueURL,omitempty"`
-	// Events contains all events that are being executed or were executed for this repository.
-	Events KrokEventList `json:"events,omitempty"`
 }
 
 //+kubebuilder:object:root=true

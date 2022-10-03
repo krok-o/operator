@@ -23,10 +23,12 @@ import (
 	"path"
 	"time"
 
+	"github.com/krok-o/operator/pkg/providers"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/cluster-api/util/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -40,8 +42,9 @@ type KrokRepositoryReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 
-	HookBase     string
-	HookProtocol string
+	HookBase          string
+	HookProtocol      string
+	PlatformProviders map[string]providers.Platform
 }
 
 //+kubebuilder:rbac:groups=delivery.krok.app,resources=krokrepositories,verbs=get;list;watch;create;update;patch;delete
@@ -66,12 +69,21 @@ func (r *KrokRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		// Error reading the object - requeue the request.
 		return ctrl.Result{}, fmt.Errorf("failed to get source object: %w", err)
 	}
-	log = log.WithValues("repository", repository)
+	log = log.WithValues("repository", klog.KObj(repository))
 
 	log.V(4).Info("found repository")
 	if repository.Status.UniqueURL != "" {
 		log.Info("skipping repository as it was already reconciled")
 		return ctrl.Result{}, nil
+	}
+
+	// Initialize the patch helper.
+	// This has to be initialized before updating the status.
+	patchHelper, err := patch.NewHelper(repository, r.Client)
+	if err != nil {
+		return ctrl.Result{
+			RequeueAfter: 1 * time.Minute,
+		}, fmt.Errorf("failed to create patch helper: %w", err)
 	}
 
 	// Generate unique callback URL.
@@ -81,29 +93,57 @@ func (r *KrokRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			RequeueAfter: 1 * time.Minute,
 		}, fmt.Errorf("unique URL generation failed: %w", err)
 	}
+	log.Info("setting status unique URL", "url", u)
 
-	repository.Status.UniqueURL = u
+	repository.Status = v1alpha1.KrokRepositoryStatus{
+		UniqueURL: u,
+	}
 
-	// Find the auth secret
-	secret := &corev1.Secret{}
+	// Find the auth authSecret
+	authSecret := &corev1.Secret{}
 	if err := r.Client.Get(ctx, types.NamespacedName{
 		Name:      repository.Spec.AuthSecretRef.Name,
 		Namespace: repository.Spec.AuthSecretRef.Namespace,
-	}, secret); err != nil {
+	}, authSecret); err != nil {
 		// Error reading the object - requeue the request.
 		return ctrl.Result{
 			RequeueAfter: 1 * time.Minute,
-		}, fmt.Errorf("failed to find associated secret object: %w", err)
+		}, fmt.Errorf("failed to find associated authSecret object: %w", err)
 	}
 
-	log.V(4).Info("found secret", "secret", secret)
-
-	// Initialize the patch helper.
-	patchHelper, err := patch.NewHelper(repository, r.Client)
-	if err != nil {
+	// Find the platform secret
+	providerSecret := &corev1.Secret{}
+	if err := r.Client.Get(ctx, types.NamespacedName{
+		Name:      repository.Spec.ProviderTokenSecretRef.Name,
+		Namespace: repository.Spec.ProviderTokenSecretRef.Namespace,
+	}, providerSecret); err != nil {
+		// Error reading the object - requeue the request.
 		return ctrl.Result{
 			RequeueAfter: 1 * time.Minute,
-		}, fmt.Errorf("failed to create patch helper: %w", err)
+		}, fmt.Errorf("failed to find associated provider object: %w", err)
+	}
+
+	log.V(4).Info("found secrets", "authSecret", klog.KObj(authSecret), "providerSecret", klog.KObj(providerSecret))
+
+	platformProvider, ok := r.PlatformProviders[repository.Spec.Platform]
+	if !ok {
+		return ctrl.Result{}, fmt.Errorf("platform not support %q", repository.Spec.Platform)
+	}
+
+	token, ok := providerSecret.Data["token"]
+	if !ok {
+		return ctrl.Result{}, fmt.Errorf("failed to find 'token' in the provider secret")
+	}
+
+	secret, ok := authSecret.Data["secret"]
+	if !ok {
+		return ctrl.Result{}, fmt.Errorf("failed to find 'secret' in the auth secret")
+	}
+
+	if err := platformProvider.CreateHook(ctx, repository, string(token), string(secret)); err != nil {
+		return ctrl.Result{
+			RequeueAfter: 5 * time.Minute,
+		}, fmt.Errorf("failed to create hook for repository: %w", err)
 	}
 
 	// Patch the source object.
