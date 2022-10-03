@@ -9,4 +9,9 @@ metadata:
     app.kubernetes.io/created-by: operator
   name: repository-sample
 spec:
-  # TODO(user): Add fields here
+  auth:
+    name: repository-sample-secret
+    namespace: default
+  platform:
+
+  url: "https://github.com/Skarlso/test"

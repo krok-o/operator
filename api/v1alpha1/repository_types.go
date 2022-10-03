@@ -26,23 +26,26 @@ type GitLab struct {
 	ProjectID int `json:"projectID,omitempty"`
 }
 
+// AuthSecretRef points to a secret which contains access information for the repository.
+type AuthSecretRef struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+}
+
 // RepositorySpec defines the desired state of Repository
 type RepositorySpec struct {
-	// Name of the repository.
-	// +kubebuilder:validation:Required
-	Name string `json:"name"`
 	// URL of the repository.
 	// +kubebuilder:validation:Required
 	URL string `json:"url"`
-	// VCS Defines which handler will be used. For values, see platforms.go.
+	// Platform defines on which platform this repository is in. Exp.: GitHub, GitLab, Gitea...
 	// +kubebuilder:validation:Required
-	VCS int `json:"vcs"`
+	Platform string `json:"platform"`
 	// GitLab specific settings.
 	// +optional
 	GitLab *GitLab `json:"gitLab,omitempty"`
 	// AuthSecretRef contains the ref to the secret containing authentication data for this repository.
 	// +kubebuilder:validation:Required
-	AuthSecretRef string `json:"auth,omitempty"`
+	AuthSecretRef AuthSecretRef `json:"auth"`
 	// Commands contains all the commands which this repository is attached to.
 	// +optional
 	Commands *CommandList `json:"commands,omitempty"`
@@ -51,7 +54,7 @@ type RepositorySpec struct {
 // RepositoryStatus defines the observed state of Repository
 type RepositoryStatus struct {
 	// A Unique URL for this given repository. Generated upon creation and saved in Status field.
-	UniqueURL string `json:"unique_url,omitempty"`
+	UniqueURL string `json:"uniqueURL,omitempty"`
 	// Events contains all events that are being executed or were executed for this repository.
 	Events EventList `json:"events,omitempty"`
 }

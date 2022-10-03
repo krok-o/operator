@@ -31,9 +31,6 @@ type CommandSpec struct {
 	// example: 0 * * * * // follows cron job syntax.
 	// +optional
 	Schedule string `json:"schedule,omitempty"`
-	// Repositories that this command can execute on.
-	// +optional
-	Repositories RepositoryList `json:"repositories,omitempty"`
 	// Image defines the image name and tag of the command
 	// example: krok-hook/slack-notification:v0.0.1
 	Image string `json:"image"`
@@ -42,7 +39,7 @@ type CommandSpec struct {
 	Enabled bool `json:"enabled"`
 	// Platforms holds all the platforms which this command supports.
 	// +optional
-	Platforms PlatformList `json:"platforms,omitempty"`
+	Platforms []string `json:"platforms,omitempty"`
 	// RequiresClone defines if this command wants to clone the repository
 	// and thus, requires auth information from the repository (which should have it).
 	//

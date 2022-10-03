@@ -20,8 +20,8 @@ func NewServer(addr string) *Server {
 
 func (s *Server) ListenAndServe() error {
 	r := mux.NewRouter()
-	r.HandleFunc("/hooks/{repository}/{platform}/callback", HookHandler)
-	http.Handle("/", r)
+	r.HandleFunc("/hooks/{repository}/{platform}/callback", Handler)
+	//http.Handle("/", r)
 	srv := &http.Server{
 		Handler:      r,
 		Addr:         s.Address,
@@ -32,8 +32,8 @@ func (s *Server) ListenAndServe() error {
 	return srv.ListenAndServe()
 }
 
-// HookHandler handles hook requests made to this operator.
-func HookHandler(w http.ResponseWriter, request *http.Request) {
+// Handler handles hook requests made to this operator.
+func Handler(w http.ResponseWriter, request *http.Request) {
 	vars := mux.Vars(request)
 	repo, ok := vars["repository"]
 	if !ok {

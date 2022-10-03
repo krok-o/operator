@@ -16,41 +16,37 @@ limitations under the License.
 
 package v1alpha1
 
-import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+const (
+	// All the different types of hooks.
+
+	// GITHUB based hooks
+	GITHUB = iota + 1
+	// GITLAB based hooks
+	GITLAB
+	// GITEA based hooks
+	GITEA
 )
 
-// PlatformSpec defines the desired state of Platform
-type PlatformSpec struct {
-	// Name gives a human-readable name to a platform.
-	// +kubebuilder:validation:Enum:=github;gitlab
+// Platform defines a platform like Github, Gitlab etc.
+type Platform struct {
+	// ID of the platform. This is chosen.
+	ID int `json:"id"`
+	// Name of the platform.
 	Name string `json:"name"`
 }
 
-// PlatformStatus defines the observed state of Platform
-type PlatformStatus struct{}
-
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-
-// Platform is the Schema for the platforms API
-type Platform struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec   PlatformSpec   `json:"spec,omitempty"`
-	Status PlatformStatus `json:"status,omitempty"`
-}
-
-//+kubebuilder:object:root=true
-
-// PlatformList contains a list of Platform
-type PlatformList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Platform `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&Platform{}, &PlatformList{})
+// SupportedPlatforms a map of supported platforms by Krok.
+var SupportedPlatforms = map[int]Platform{
+	GITHUB: {
+		ID:   GITHUB,
+		Name: "github",
+	},
+	GITLAB: {
+		ID:   GITLAB,
+		Name: "gitlab",
+	},
+	GITEA: {
+		ID:   GITEA,
+		Name: "gitea",
+	},
 }

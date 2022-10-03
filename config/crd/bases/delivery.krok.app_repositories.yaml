@@ -38,7 +38,15 @@ spec:
               auth:
                 description: AuthSecretRef contains the ref to the secret containing
                   authentication data for this repository.
-                type: string
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                required:
+                - name
+                - namespace
+                type: object
               commands:
                 description: Commands contains all the commands which this repository
                   is attached to.
@@ -67,7 +75,34 @@ spec:
                           type: string
                         metadata:
                           type: object
-                        spec: {}
+                        spec:
+                          description: CommandSpec defines the desired state of Command
+                          properties:
+                            enabled:
+                              description: Enabled defines if this command can be
+                                executed or not.
+                              type: boolean
+                            image:
+                              description: 'Image defines the image name and tag of
+                                the command example: krok-hook/slack-notification:v0.0.1'
+                              type: string
+                            name:
+                              description: Name of the command.
+                              type: string
+                            platforms:
+                              description: Platforms holds all the platforms which
+                                this command supports.
+                              items:
+                                type: string
+                              type: array
+                            schedule:
+                              description: 'Schedule of the command. example: 0 *
+                                * * * // follows cron job syntax.'
+                              type: string
+                          required:
+                          - image
+                          - name
+                          type: object
                         status:
                           description: CommandStatus defines the observed state of
                             Command
@@ -136,20 +171,17 @@ spec:
                       in Gitlab.
                     type: integer
                 type: object
-              name:
-                description: Name of the repository.
+              platform:
+                description: 'Platform defines on which platform this repository is
+                  in. Exp.: GitHub, GitLab, Gitea...'
                 type: string
               url:
                 description: URL of the repository.
                 type: string
-              vcs:
-                description: VCS Defines which handler will be used. For values, see
-                  platforms.go.
-                type: integer
             required:
-            - name
+            - auth
+            - platform
             - url
-            - vcs
             type: object
           status:
             description: RepositoryStatus defines the observed state of Repository
@@ -249,7 +281,7 @@ spec:
                 required:
                 - items
                 type: object
-              unique_url:
+              uniqueURL:
                 description: A Unique URL for this given repository. Generated upon
                   creation and saved in Status field.
                 type: string

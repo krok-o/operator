@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	deliveryv1alpha1 "github.com/krok-o/operator/api/v1alpha1"
+	"github.com/krok-o/operator/api/v1alpha1"
 )
 
 // CommandReconciler reconciles a Command object
@@ -57,6 +57,6 @@ func (r *CommandReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 // SetupWithManager sets up the controller with the Manager.
 func (r *CommandReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&deliveryv1alpha1.Command{}).
+		For(&v1alpha1.Command{}).
 		Complete(r)
 }

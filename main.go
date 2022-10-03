@@ -55,10 +55,14 @@ func main() {
 		enableLeaderElection bool
 		probeAddr            string
 		hookServerAddr       string
+		hookBase             string
+		hookProtocol         string
 	)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&hookServerAddr, "hook-server-bind-address", ":5678", "The address of the hook server.")
+	flag.StringVar(&hookBase, "hook-base-address", "localhost", "The address of the callback that is used.")
+	flag.StringVar(&hookProtocol, "hook-protocol", "http", "The protocol at which the hook is running.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -95,8 +99,10 @@ func main() {
 	}
 
 	if err = (&controllers.RepositoryReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:       mgr.GetClient(),
+		Scheme:       mgr.GetScheme(),
+		HookBase:     hookBase,
+		HookProtocol: hookProtocol,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Repository")
 		os.Exit(1)
