@@ -25,8 +25,6 @@ type PlatformSpec struct {
 	// Name gives a human-readable name to a platform.
 	// +kubebuilder:validation:Enum:=github;gitlab
 	Name string `json:"name"`
-	// ID identifies the platform. This is a given.
-	ID int `json:"id"`
 }
 
 // PlatformStatus defines the observed state of Platform

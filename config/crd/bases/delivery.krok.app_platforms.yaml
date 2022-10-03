@@ -35,9 +35,6 @@ spec:
           spec:
             description: PlatformSpec defines the desired state of Platform
             properties:
-              id:
-                description: ID identifies the platform. This is a given.
-                type: integer
               name:
                 description: Name gives a human-readable name to a platform.
                 enum:
@@ -45,7 +42,6 @@ spec:
                 - gitlab
                 type: string
             required:
-            - id
             - name
             type: object
           status:

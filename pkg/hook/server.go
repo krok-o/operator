@@ -20,7 +20,7 @@ func NewServer(addr string) *Server {
 
 func (s *Server) ListenAndServe() error {
 	r := mux.NewRouter()
-	r.HandleFunc("/hooks/{rid:[0-9]+}/{vid:[0-9]+}/callback", HookHandler)
+	r.HandleFunc("/hooks/{repository}/{platform}/callback", HookHandler)
 	http.Handle("/", r)
 	srv := &http.Server{
 		Handler:      r,
@@ -35,17 +35,17 @@ func (s *Server) ListenAndServe() error {
 // HookHandler handles hook requests made to this operator.
 func HookHandler(w http.ResponseWriter, request *http.Request) {
 	vars := mux.Vars(request)
-	rid, ok := vars["rid"]
+	repo, ok := vars["repository"]
 	if !ok {
 		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "invalid or missing repository ID")
+		fmt.Fprintf(w, "invalid or missing repository name")
 		return
 	}
-	vid := vars["vid"]
+	platform := vars["platform"]
 	if !ok {
 		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "invalid or missing vcs ID")
+		fmt.Fprintf(w, "invalid or missing platform identifier")
 		return
 	}
-	fmt.Fprintf(w, "received: rid: %s, vid: %s", rid, vid)
+	fmt.Fprintf(w, "received: repo: %s, platform: %s", repo, platform)
 }
