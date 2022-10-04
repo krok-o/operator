@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/krok-o/operator/api/v1alpha1"
+	"github.com/krok-o/operator/pkg/providers"
 )
 
 // Platform is a GitHub based platform implementation.
@@ -32,6 +34,8 @@ func NewGithubPlatformProvider(log logr.Logger) *Platform {
 		Logger: log.WithName("platform-logger"),
 	}
 }
+
+var _ providers.Platform = &Platform{}
 
 // ValidateRequest will take a hook and verify it being a valid hook request according to
 // GitHub's rules.
@@ -186,4 +190,26 @@ func (g *Platform) CreateHook(ctx context.Context, repo *v1alpha1.KrokRepository
 	}
 	log.V(4).WithValues("name", *hook.Name).Info("Hook with name successfully created.")
 	return nil
+}
+
+// GetRefIfPresent returns a Ref if the payload contains one.
+func (g *Platform) GetRefIfPresent(ctx context.Context, event *v1alpha1.KrokEvent) (string, error) {
+	var ref string
+	switch event.Spec.Type {
+	case string(github.PullRequestEvent):
+		payload := &github.PullRequestPayload{}
+		if err := json.Unmarshal([]byte(event.Spec.Payload), payload); err != nil {
+			return "", fmt.Errorf("failed to unmarshall payload: %w", err)
+		}
+		ref = payload.PullRequest.Head.Ref
+	case string(github.PushEvent):
+		payload := &github.PushPayload{}
+		if err := json.Unmarshal([]byte(event.Spec.Payload), payload); err != nil {
+			return "", fmt.Errorf("failed to unmarshall payload: %w", err)
+		}
+		ref = payload.Ref
+	default:
+		return "not-found", nil
+	}
+	return ref, nil
 }

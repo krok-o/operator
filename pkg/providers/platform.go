@@ -24,4 +24,6 @@ type Platform interface {
 	GetEventID(ctx context.Context, r *http.Request) (string, error)
 	// GetEventType Based on the platform, retrieve the Type of the event.
 	GetEventType(ctx context.Context, r *http.Request) (string, error)
+	// GetRefIfPresent returns a Ref if the payload contains one.
+	GetRefIfPresent(ctx context.Context, event *v1alpha1.KrokEvent) (string, error)
 }

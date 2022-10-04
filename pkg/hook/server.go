@@ -3,6 +3,7 @@ package hook
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -49,6 +50,11 @@ func (s *Server) ListenAndServe() error {
 	}
 
 	return srv.ListenAndServe()
+}
+
+// Payload is used to parse the ref out of the payload.
+type Payload struct {
+	Ref string `json:"ref"`
 }
 
 // Handler handles hook requests made to this operator.
@@ -122,6 +128,13 @@ func (s *Server) Handler(w http.ResponseWriter, request *http.Request) {
 		return
 	}
 
+	// Get the REF from the payload.
+	payload := &Payload{}
+	if err := json.Unmarshal(content, payload); err != nil {
+		logAndFail(http.StatusInternalServerError, err, "failed to parse payload and get ref")
+		return
+	}
+
 	// This should only happen if it wasn't a `Ping` event which is the initial registration.
 	eventType, err := provider.GetEventType(context.Background(), request)
 	if err != nil {
@@ -138,8 +151,9 @@ func (s *Server) Handler(w http.ResponseWriter, request *http.Request) {
 			Namespace: repository.Namespace,
 		},
 		Spec: v1alpha1.KrokEventSpec{
-			Payload: string(content),
-			Type:    eventType,
+			Payload:   string(content),
+			Type:      eventType,
+			CommitRef: payload.Ref,
 		},
 	}
 	// Set external object ControllerReference to the provider ref.

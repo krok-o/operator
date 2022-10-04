@@ -20,6 +20,7 @@ import (
 	"flag"
 	"os"
 
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/krok-o/operator/pkg/hook"
 	"github.com/krok-o/operator/pkg/providers"
 	"github.com/krok-o/operator/pkg/providers/github"
@@ -49,6 +50,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(deliveryv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(sourcev1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -128,9 +130,10 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.KrokEventReconciler{
-		Client:         mgr.GetClient(),
-		Scheme:         mgr.GetScheme(),
-		CommandTimeout: commandTimeout,
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		CommandTimeout:    commandTimeout,
+		PlatformProviders: platformProviders,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KrokEvent")
 		os.Exit(1)
