@@ -123,6 +123,13 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "KrokCommand")
 		os.Exit(1)
 	}
+	if err = (&controllers.KrokEventReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "KrokEvent")
+		os.Exit(1)
+	}
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
@@ -134,7 +141,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	hookServer := hook.NewServer(hookServerAddr, platformProviders, mgr.GetClient())
+	hookServer := hook.NewServer(hookServerAddr, platformProviders, mgr.GetClient(), setupLog)
 
 	// start the registry
 	go func() {

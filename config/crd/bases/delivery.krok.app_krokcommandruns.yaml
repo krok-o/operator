@@ -34,26 +34,14 @@ spec:
             type: object
           spec:
             description: KrokCommandRunSpec defines the desired state of KrokCommandRun
+              The Event which owns this CommandRun will be set as Owner.
             properties:
               commandName:
                 description: CommandName is the name of the command that is being
                   executed.
                 type: string
-              eventRef:
-                description: EventRef is the ref of the event that this run belongs
-                  to.
-                properties:
-                  name:
-                    type: string
-                  namespace:
-                    type: string
-                required:
-                - name
-                - namespace
-                type: object
             required:
             - commandName
-            - eventRef
             type: object
           status:
             description: KrokCommandRunStatus defines the observed state of KrokCommandRun

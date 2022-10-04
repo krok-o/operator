@@ -20,22 +20,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // KrokEventSpec defines the desired state of KrokEvent
 type KrokEventSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of KrokEvent. Edit krokevent_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// CommandRun will be set once created.
+	CommandRun Ref `json:"commandRun"`
 }
 
 // KrokEventStatus defines the observed state of KrokEvent
 type KrokEventStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Ready defines if an event is done or not.
+	Ready bool `json:"ready"`
+	// Outcome holds the outcome of the event such as success, failed...
+	// +optional
+	Outcome string `json:"outcome,omitempty"`
 }
 
 //+kubebuilder:object:root=true

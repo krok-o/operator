@@ -26,8 +26,8 @@ type GitLab struct {
 	ProjectID int `json:"projectID,omitempty"`
 }
 
-// SecretRef points to a secret which contains access information for the repository.
-type SecretRef struct {
+// Ref points to a secret which contains access information for the repository.
+type Ref struct {
 	Name      string `json:"name"`
 	Namespace string `json:"namespace"`
 }
@@ -45,11 +45,11 @@ type KrokRepositorySpec struct {
 	GitLab *GitLab `json:"gitLab,omitempty"`
 	// AuthSecretRef contains the ref to the secret containing authentication data for this repository.
 	// +kubebuilder:validation:Required
-	AuthSecretRef SecretRef `json:"authSecretRef"`
+	AuthSecretRef Ref `json:"authSecretRef"`
 	// ProviderTokenSecretRef contains the ref to the secret containing authentication data for the provider of this
 	// repository. For example, GitHub token, or a Gitlab token...
 	// +kubebuilder:validation:Required
-	ProviderTokenSecretRef SecretRef `json:"providerTokenSecretRef"`
+	ProviderTokenSecretRef Ref `json:"providerTokenSecretRef"`
 	// Commands contains all the commands which this repository is attached to.
 	// +optional
 	Commands *KrokCommandList `json:"commands,omitempty"`
@@ -61,6 +61,9 @@ type KrokRepositorySpec struct {
 type KrokRepositoryStatus struct {
 	// A Unique URL for this given repository. Generated upon creation and saved in Status field.
 	UniqueURL string `json:"uniqueURL,omitempty"`
+	// CommandRuns contains run outputs for command runs that have been executed for this Repository.
+	// This holds the last 10 outcomes.
+	CommandRuns KrokCommandRunList `json:"commandRuns,omitempty"`
 }
 
 //+kubebuilder:object:root=true

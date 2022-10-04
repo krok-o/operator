@@ -34,6 +34,32 @@ rules:
 - apiGroups:
   - delivery.krok.app
   resources:
+  - krokevents
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - delivery.krok.app
+  resources:
+  - krokevents/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - delivery.krok.app
+  resources:
+  - krokevents/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - delivery.krok.app
+  resources:
   - krokrepositories
   verbs:
   - create

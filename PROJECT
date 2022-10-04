@@ -10,48 +10,6 @@ resources:
   controller: true
   domain: krok.app
   group: delivery
-  kind: Repository
-  path: github.com/krok-o/operator/api/v1alpha1
-  version: v1alpha1
-- api:
-    crdVersion: v1
-    namespaced: true
-  controller: true
-  domain: krok.app
-  group: delivery
-  kind: Command
-  path: github.com/krok-o/operator/api/v1alpha1
-  version: v1alpha1
-- api:
-    crdVersion: v1
-    namespaced: true
-  domain: krok.app
-  group: delivery
-  kind: CommandRun
-  path: github.com/krok-o/operator/api/v1alpha1
-  version: v1alpha1
-- api:
-    crdVersion: v1
-    namespaced: true
-  domain: krok.app
-  group: delivery
-  kind: Event
-  path: github.com/krok-o/operator/api/v1alpha1
-  version: v1alpha1
-- api:
-    crdVersion: v1
-    namespaced: true
-  domain: krok.app
-  group: delivery
-  kind: Platform
-  path: github.com/krok-o/operator/api/v1alpha1
-  version: v1alpha1
-- api:
-    crdVersion: v1
-    namespaced: true
-  controller: true
-  domain: krok.app
-  group: delivery
   kind: KrokRepository
   path: github.com/krok-o/operator/api/v1alpha1
   version: v1alpha1
@@ -83,6 +41,7 @@ resources:
 - api:
     crdVersion: v1
     namespaced: true
+  controller: true
   domain: krok.app
   group: delivery
   kind: KrokEvent

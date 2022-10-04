@@ -20,16 +20,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EventRef is a reference to an event.
-type EventRef struct {
-	Namespace string `json:"namespace"`
-	Name      string `json:"name"`
-}
-
 // KrokCommandRunSpec defines the desired state of KrokCommandRun
+// The Event which owns this CommandRun will be set as Owner.
 type KrokCommandRunSpec struct {
-	// EventRef is the ref of the event that this run belongs to.
-	EventRef EventRef `json:"eventRef"`
 	// CommandName is the name of the command that is being executed.
 	CommandName string `json:"commandName"`
 }

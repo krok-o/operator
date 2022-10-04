@@ -29,7 +29,7 @@ type Platform struct {
 // NewGithubPlatformProvider creates a new hook platform provider for GitHub.
 func NewGithubPlatformProvider(log logr.Logger) *Platform {
 	return &Platform{
-		Logger: log,
+		Logger: log.WithName("platform-logger"),
 	}
 }
 
@@ -174,6 +174,10 @@ func (g *Platform) CreateHook(ctx context.Context, repo *v1alpha1.KrokRepository
 		Config: config,
 	})
 	if err != nil {
+		if resp.StatusCode == 422 && strings.Contains(err.Error(), "") {
+			log.V(4).Info("hook already exists")
+			return nil
+		}
 		return fmt.Errorf("failed to create hook: %w", err)
 	}
 	if resp.StatusCode < 200 && resp.StatusCode > 299 {
