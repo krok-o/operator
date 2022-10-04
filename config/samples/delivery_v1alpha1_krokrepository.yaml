@@ -14,3 +14,6 @@ spec:
   url: "https://github.com/Skarlso/test"
   events:
     - push
+  commands:
+    - namespace: krok-system
+      name: slack-command

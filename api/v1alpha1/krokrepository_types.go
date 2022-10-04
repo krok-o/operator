@@ -52,7 +52,7 @@ type KrokRepositorySpec struct {
 	ProviderTokenSecretRef Ref `json:"providerTokenSecretRef"`
 	// Commands contains all the commands which this repository is attached to.
 	// +optional
-	Commands *KrokCommandList `json:"commands,omitempty"`
+	Commands []Ref `json:"commands,omitempty"`
 	// Events contains all events that this repository subscribes to.
 	Events []string `json:"events,omitempty"`
 }
@@ -61,9 +61,9 @@ type KrokRepositorySpec struct {
 type KrokRepositoryStatus struct {
 	// A Unique URL for this given repository. Generated upon creation and saved in Status field.
 	UniqueURL string `json:"uniqueURL,omitempty"`
-	// CommandRuns contains run outputs for command runs that have been executed for this Repository.
+	// Events contains run outputs for command runs that have been executed for this Repository.
 	// This holds the last 10 outcomes.
-	CommandRuns KrokCommandRunList `json:"commandRuns,omitempty"`
+	Events KrokEventList `json:"events,omitempty"`
 }
 
 //+kubebuilder:object:root=true

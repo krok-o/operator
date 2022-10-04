@@ -39,7 +39,7 @@ import (
 	"github.com/krok-o/operator/api/v1alpha1"
 )
 
-var jobFinalizer = "finalizers.krok.app"
+var jobFinalizer = "event.krok.app/finalizer"
 
 // KrokEventReconciler reconciles a KrokEvent object
 type KrokEventReconciler struct {
@@ -52,6 +52,7 @@ type KrokEventReconciler struct {
 //+kubebuilder:rbac:groups=delivery.krok.app,resources=krokevents,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=delivery.krok.app,resources=krokevents/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=delivery.krok.app,resources=krokevents/finalizers,verbs=update
+//+kubebuilder:rbac:groups=delivery.krok.app,resources=jobs/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -70,7 +71,7 @@ func (r *KrokEventReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	log.Info("found event", "event", klog.KObj(event))
 
-	if event.Status.Ready {
+	if event.Status.Done {
 		log.Info("skip event as it's already done")
 		return ctrl.Result{}, nil
 	}
@@ -81,9 +82,30 @@ func (r *KrokEventReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	log.V(4).Info("found repository", "repository", klog.KObj(repository))
-	if len(event.Spec.Jobs.Items) == 0 {
-		if err := r.reconcileCreateJobs(ctx, log, event, repository); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to create jobs: %w", err)
+	if len(event.Status.Jobs) == 0 {
+		jobList, err := r.reconcileCreateJobs(ctx, log, event, repository)
+		if err != nil {
+			// requeue the updated event.
+			return ctrl.Result{
+				RequeueAfter: 30 * time.Second,
+			}, fmt.Errorf("failed to create jobs: %w", err)
+		}
+
+		// Initialize the patch helper.
+		// This has to be initialized before updating the status.
+		patchHelper, err := patch.NewHelper(event, r.Client)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to create patch helper: %w", err)
+		}
+
+		event.Status = v1alpha1.KrokEventStatus{
+			Jobs: jobList,
+			Done: false,
+		}
+
+		// Patch the source object.
+		if err := patchHelper.Patch(ctx, event); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to patch event object: %w", err)
 		}
 	} else {
 		done, err := r.reconcileExistingJobs(ctx, log, event, repository)
@@ -112,13 +134,7 @@ func (r *KrokEventReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *KrokEventReconciler) reconcileCreateJobs(ctx context.Context, logger logr.Logger, event *v1alpha1.KrokEvent, repository *v1alpha1.KrokRepository) error {
-	// Initialize the patch helper.
-	// This has to be initialized before updating the status.
-	patchHelper, err := patch.NewHelper(event, r.Client)
-	if err != nil {
-		return fmt.Errorf("failed to create patch helper: %w", err)
-	}
+func (r *KrokEventReconciler) reconcileCreateJobs(ctx context.Context, logger logr.Logger, event *v1alpha1.KrokEvent, repository *v1alpha1.KrokRepository) ([]v1alpha1.Ref, error) {
 	supportsPlatform := func(platforms []string) bool {
 		for _, p := range platforms {
 			if p == repository.Spec.Platform {
@@ -128,16 +144,24 @@ func (r *KrokEventReconciler) reconcileCreateJobs(ctx context.Context, logger lo
 
 		return false
 	}
-	for _, command := range repository.Spec.Commands.Items {
+	var jobList []v1alpha1.Ref
+	for _, commandRef := range repository.Spec.Commands {
+		command := &v1alpha1.KrokCommand{}
+		if err := r.Client.Get(ctx, types.NamespacedName{
+			Namespace: commandRef.Namespace,
+			Name:      commandRef.Name,
+		}, command); err != nil {
+			return nil, fmt.Errorf("failed to get command object: %w", err)
+		}
 		if !command.Spec.Enabled {
-			logger.Info("skipped command as it was disabled", "command", klog.KObj(&command))
+			logger.Info("skipped command as it was disabled", "command", klog.KObj(command))
 			continue
 		}
 		if !supportsPlatform(command.Spec.Platforms) {
 			logger.Info(
 				"skipped command as it does not support the given platform",
 				"command",
-				klog.KObj(&command),
+				klog.KObj(command),
 				"platform",
 				repository.Spec.Platform,
 				"supported-platforms",
@@ -145,7 +169,7 @@ func (r *KrokEventReconciler) reconcileCreateJobs(ctx context.Context, logger lo
 			)
 			continue
 		}
-		logger.V(4).Info("launching the following command", "command", klog.KObj(&command))
+		logger.V(4).Info("launching the following command", "command", klog.KObj(command))
 
 		// TODO: If the command requires access to the source it must clone it itself.
 		// This is not very effective... There should be access to the source to all Jobs through
@@ -164,9 +188,8 @@ func (r *KrokEventReconciler) reconcileCreateJobs(ctx context.Context, logger lo
 				APIVersion: batchv1.GroupName,
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:       r.generateJobName(command.Name),
-				Namespace:  command.Namespace,
-				Finalizers: []string{jobFinalizer}, // to prevent the jobs from being deleted until reconciled.
+				Name:      r.generateJobName(command.Name),
+				Namespace: command.Namespace,
 			},
 			Spec: batchv1.JobSpec{
 				ActiveDeadlineSeconds: pointer.Int64(int64(r.CommandTimeout)),
@@ -191,38 +214,39 @@ func (r *KrokEventReconciler) reconcileCreateJobs(ctx context.Context, logger lo
 
 		// Set external object ControllerReference to the provider ref.
 		if err := controllerutil.SetControllerReference(event, job, r.Client.Scheme()); err != nil {
-			return fmt.Errorf("failed to set owner reference: %w", err)
+			return nil, fmt.Errorf("failed to set owner reference: %w", err)
 		}
-		event.Spec.Jobs.Items = append(event.Spec.Jobs.Items, *job)
+
+		// Since this is a brand-new object, we can be sure that it will be an update.
+		controllerutil.AddFinalizer(job, jobFinalizer)
+
+		if err := r.Create(context.Background(), job); err != nil {
+			return nil, fmt.Errorf("failed to create job: %w", err)
+		}
+		jobList = append(jobList, v1alpha1.Ref{
+			Name:      job.Name,
+			Namespace: job.Namespace,
+		})
 	}
 
-	// Patch the source object.
-	if err := patchHelper.Patch(ctx, event); err != nil {
-		return fmt.Errorf("failed to patch event object: %w", err)
-	}
-	return nil
+	return jobList, nil
 }
 
 func (r *KrokEventReconciler) reconcileExistingJobs(ctx context.Context, logger logr.Logger, event *v1alpha1.KrokEvent, repository *v1alpha1.KrokRepository) (bool, error) {
-	// Initialize the patch helper.
-	// This has to be initialized before updating the status.
-	patchHelper, err := patch.NewHelper(event, r.Client)
-	if err != nil {
-		return false, fmt.Errorf("failed to create patch helper: %w", err)
-	}
-
 	var (
 		done   = true
 		failed bool
 	)
-	for _, job := range event.Spec.Jobs.Items {
+	for _, jobRef := range event.Status.Jobs {
 		// refresh the status of jobs
-		job := job
+		jobRef := jobRef
+
+		job := &batchv1.Job{}
 		if err := r.Client.Get(ctx, types.NamespacedName{
-			Namespace: job.Namespace,
-			Name:      job.Name,
-		}, event); err != nil {
-			return false, fmt.Errorf("failed to get event object: %w", err)
+			Namespace: jobRef.Namespace,
+			Name:      jobRef.Name,
+		}, job); err != nil {
+			return false, fmt.Errorf("failed to get job object: %w", err)
 		}
 		if job.Status.Active > 0 {
 			done = false
@@ -235,24 +259,34 @@ func (r *KrokEventReconciler) reconcileExistingJobs(ctx context.Context, logger 
 		}
 	}
 
+	// Initialize the patch helper.
+	// This has to be initialized before updating the status.
+	patchHelper, err := patch.NewHelper(event, r.Client)
+	if err != nil {
+		return done, fmt.Errorf("failed to create patch helper: %w", err)
+	}
+
+	event.Status.Done = false
 	if done {
-		event.Status.Ready = true
+		event.Status.Done = true
 		event.Status.Outcome = "succeeded"
 		if failed {
 			event.Status.Outcome = "failed"
 		}
 
 		// All the jobs finished. Remove their finalizers so they can be deleted.
-		for _, job := range event.Spec.Jobs.Items {
-			job := job
+		for _, jobRef := range event.Status.Jobs {
+			jobRef := jobRef
+
+			job := &batchv1.Job{}
 			if err := r.Client.Get(ctx, types.NamespacedName{
-				Namespace: job.Namespace,
-				Name:      job.Name,
-			}, event); err != nil {
-				return false, fmt.Errorf("failed to get event object: %w", err)
+				Namespace: jobRef.Namespace,
+				Name:      jobRef.Name,
+			}, job); err != nil {
+				return false, fmt.Errorf("failed to get job object: %w", err)
 			}
-			job.Finalizers = nil
-			if err := r.Update(ctx, &job); err != nil {
+			controllerutil.RemoveFinalizer(job, jobFinalizer)
+			if err := r.Update(ctx, job); err != nil {
 				return false, fmt.Errorf("failed to remove finalizer from job: %w", err)
 			}
 		}
@@ -262,7 +296,7 @@ func (r *KrokEventReconciler) reconcileExistingJobs(ctx context.Context, logger 
 
 	// Patch the source object.
 	if err := patchHelper.Patch(ctx, event); err != nil {
-		return done, fmt.Errorf("failed to patch repository object: %w", err)
+		return done, fmt.Errorf("failed to patch event object: %w", err)
 	}
 	return done, nil
 }

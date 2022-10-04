@@ -50,117 +50,19 @@ spec:
               commands:
                 description: Commands contains all the commands which this repository
                   is attached to.
-                properties:
-                  apiVersion:
-                    description: 'APIVersion defines the versioned schema of this
-                      representation of an object. Servers should convert recognized
-                      schemas to the latest internal value, and may reject unrecognized
-                      values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
-                    type: string
-                  items:
-                    items:
-                      description: KrokCommand is the Schema for the krokcommands
-                        API
-                      properties:
-                        apiVersion:
-                          description: 'APIVersion defines the versioned schema of
-                            this representation of an object. Servers should convert
-                            recognized schemas to the latest internal value, and may
-                            reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
-                          type: string
-                        kind:
-                          description: 'Kind is a string value representing the REST
-                            resource this object represents. Servers may infer this
-                            from the endpoint the client submits requests to. Cannot
-                            be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-                          type: string
-                        metadata:
-                          type: object
-                        spec:
-                          description: KrokCommandSpec defines the desired state of
-                            KrokCommand
-                          properties:
-                            enabled:
-                              description: Enabled defines if this command can be
-                                executed or not.
-                              type: boolean
-                            image:
-                              description: 'Image defines the image name and tag of
-                                the command example: krok-hook/slack-notification:v0.0.1'
-                              type: string
-                            platforms:
-                              description: Platforms holds all the platforms which
-                                this command supports.
-                              items:
-                                type: string
-                              type: array
-                            schedule:
-                              description: 'Schedule of the command. example: 0 *
-                                * * * // follows cron job syntax.'
-                              type: string
-                          required:
-                          - image
-                          type: object
-                        status:
-                          description: KrokCommandStatus defines the observed state
-                            of KrokCommand
-                          type: object
-                      type: object
-                    type: array
-                  kind:
-                    description: 'Kind is a string value representing the REST resource
-                      this object represents. Servers may infer this from the endpoint
-                      the client submits requests to. Cannot be updated. In CamelCase.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-                    type: string
-                  metadata:
-                    description: ListMeta describes metadata that synthetic resources
-                      must have, including lists and various status objects. A resource
-                      may have only one of {ObjectMeta, ListMeta}.
-                    properties:
-                      continue:
-                        description: continue may be set if the user set a limit on
-                          the number of items returned, and indicates that the server
-                          has more data available. The value is opaque and may be
-                          used to issue another request to the endpoint that served
-                          this list to retrieve the next set of available objects.
-                          Continuing a consistent list may not be possible if the
-                          server configuration has changed or more than a few minutes
-                          have passed. The resourceVersion field returned when using
-                          this continue value will be identical to the value in the
-                          first response, unless you have received this token from
-                          an error message.
-                        type: string
-                      remainingItemCount:
-                        description: remainingItemCount is the number of subsequent
-                          items in the list which are not included in this list response.
-                          If the list request contained label or field selectors,
-                          then the number of remaining items is unknown and the field
-                          will be left unset and omitted during serialization. If
-                          the list is complete (either because it is not chunking
-                          or because this is the last chunk), then there are no more
-                          remaining items and this field will be left unset and omitted
-                          during serialization. Servers older than v1.15 do not set
-                          this field. The intended use of the remainingItemCount is
-                          *estimating* the size of a collection. Clients should not
-                          rely on the remainingItemCount to be set or to be exact.
-                        format: int64
-                        type: integer
-                      resourceVersion:
-                        description: 'String that identifies the server''s internal
-                          version of this object that can be used by clients to determine
-                          when objects have changed. Value must be treated as opaque
-                          by clients and passed unmodified back to the server. Populated
-                          by the system. Read-only. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency'
-                        type: string
-                      selfLink:
-                        description: 'Deprecated: selfLink is a legacy read-only field
-                          that is no longer populated by the system.'
-                        type: string
-                    type: object
-                required:
-                - items
-                type: object
+                items:
+                  description: Ref points to a secret which contains access information
+                    for the repository.
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                type: array
               events:
                 description: Events contains all events that this repository subscribes
                   to.
@@ -204,9 +106,9 @@ spec:
           status:
             description: KrokRepositoryStatus defines the observed state of KrokRepository
             properties:
-              commandRuns:
-                description: CommandRuns contains run outputs for command runs that
-                  have been executed for this Repository. This holds the last 10 outcomes.
+              events:
+                description: Events contains run outputs for command runs that have
+                  been executed for this Repository. This holds the last 10 outcomes.
                 properties:
                   apiVersion:
                     description: 'APIVersion defines the versioned schema of this
@@ -216,8 +118,7 @@ spec:
                     type: string
                   items:
                     items:
-                      description: KrokCommandRun is the Schema for the KrokCommandRuns
-                        API
+                      description: KrokEvent is the Schema for the krokevents API
                       properties:
                         apiVersion:
                           description: 'APIVersion defines the versioned schema of
@@ -234,31 +135,60 @@ spec:
                         metadata:
                           type: object
                         spec:
-                          description: KrokCommandRunSpec defines the desired state
-                            of KrokCommandRun The Event which owns this CommandRun
-                            will be set as Owner.
+                          description: KrokEventSpec defines the desired state of
+                            KrokEvent
                           properties:
-                            commandName:
-                              description: CommandName is the name of the command
-                                that is being executed.
+                            commandRun:
+                              description: CommandRun will be set once created.
+                              properties:
+                                name:
+                                  type: string
+                                namespace:
+                                  type: string
+                              required:
+                              - name
+                              - namespace
+                              type: object
+                            payload:
+                              description: Payload is the received event payload from
+                                the provider.
+                              type: string
+                            type:
+                              description: 'Type defines the event type such as: push,
+                                pull, ping...'
                               type: string
                           required:
-                          - commandName
+                          - commandRun
+                          - payload
+                          - type
                           type: object
                         status:
-                          description: KrokCommandRunStatus defines the observed state
-                            of KrokCommandRun
+                          description: KrokEventStatus defines the observed state
+                            of KrokEvent
                           properties:
+                            done:
+                              description: Done defines if an event is done or not.
+                              type: boolean
+                            jobs:
+                              description: Jobs contains current running jobs for
+                                this event.
+                              items:
+                                description: Ref points to a secret which contains
+                                  access information for the repository.
+                                properties:
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                required:
+                                - name
+                                - namespace
+                                type: object
+                              type: array
                             outcome:
-                              description: Outcome is any output of the command. Stdout
-                                and stderr combined.
+                              description: Outcome holds the outcome of the event
+                                such as success, failed...
                               type: string
-                            status:
-                              description: 'Status is the current state of the command
-                                run. example: created, running, failed, success'
-                              type: string
-                          required:
-                          - status
                           type: object
                       type: object
                     type: array

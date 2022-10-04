@@ -17,7 +17,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -29,18 +28,19 @@ type KrokEventSpec struct {
 	Payload string `json:"payload"`
 	// Type defines the event type such as: push, pull, ping...
 	Type string `json:"type"`
-	// Jobs contains current running jobs for this event.
-	// +optional
-	Jobs batchv1.JobList `json:"jobs,omitempty"`
 }
 
 // KrokEventStatus defines the observed state of KrokEvent
 type KrokEventStatus struct {
-	// Ready defines if an event is done or not.
-	Ready bool `json:"ready"`
+	// Done defines if an event is done or not.
+	// +optional
+	Done bool `json:"done,omitempty"`
 	// Outcome holds the outcome of the event such as success, failed...
 	// +optional
 	Outcome string `json:"outcome,omitempty"`
+	// Jobs contains current running jobs for this event.
+	// +optional
+	Jobs []Ref `json:"jobs,omitempty"`
 }
 
 //+kubebuilder:object:root=true

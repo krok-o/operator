@@ -8,6 +8,12 @@ rules:
 - apiGroups:
   - delivery.krok.app
   resources:
+  - jobs/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - delivery.krok.app
+  resources:
   - krokcommands
   verbs:
   - create
