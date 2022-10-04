@@ -22,8 +22,6 @@ import (
 
 // KrokCommandSpec defines the desired state of KrokCommand
 type KrokCommandSpec struct {
-	// Name of the command.
-	Name string `json:"name"`
 	// Schedule of the command.
 	// example: 0 * * * * // follows cron job syntax.
 	// +optional
@@ -47,10 +45,7 @@ type KrokCommandSpec struct {
 }
 
 // KrokCommandStatus defines the observed state of KrokCommand
-type KrokCommandStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-}
+type KrokCommandStatus struct{}
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status

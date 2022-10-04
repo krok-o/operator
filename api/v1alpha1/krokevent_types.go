@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -24,6 +25,13 @@ import (
 type KrokEventSpec struct {
 	// CommandRun will be set once created.
 	CommandRun Ref `json:"commandRun"`
+	// Payload is the received event payload from the provider.
+	Payload string `json:"payload"`
+	// Type defines the event type such as: push, pull, ping...
+	Type string `json:"type"`
+	// Jobs contains current running jobs for this event.
+	// +optional
+	Jobs batchv1.JobList `json:"jobs,omitempty"`
 }
 
 // KrokEventStatus defines the observed state of KrokEvent

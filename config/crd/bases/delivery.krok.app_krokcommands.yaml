@@ -42,9 +42,6 @@ spec:
                 description: 'Image defines the image name and tag of the command
                   example: krok-hook/slack-notification:v0.0.1'
                 type: string
-              name:
-                description: Name of the command.
-                type: string
               platforms:
                 description: Platforms holds all the platforms which this command
                   supports.
@@ -57,7 +54,6 @@ spec:
                 type: string
             required:
             - image
-            - name
             type: object
           status:
             description: KrokCommandStatus defines the observed state of KrokCommand

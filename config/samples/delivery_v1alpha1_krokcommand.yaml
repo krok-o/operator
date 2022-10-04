@@ -1,13 +1,10 @@
 apiVersion: delivery.krok.app/v1alpha1
 kind: KrokCommand
 metadata:
-  labels:
-    app.kubernetes.io/name: krokcommand
-    app.kubernetes.io/instance: krokcommand-sample
-    app.kubernetes.io/part-of: operator
-    app.kuberentes.io/managed-by: kustomize
-    app.kubernetes.io/created-by: operator
-  name: krokcommand-sample
+  name: slack-command
   namespace: krok-system
 spec:
-  # TODO(user): Add fields here
+  enabled: true
+  image: krok-hook/slack-notification:v0.0.1
+  platforms:
+    - github

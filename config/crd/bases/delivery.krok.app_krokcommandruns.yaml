@@ -18,7 +18,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: KrokCommandRun is the Schema for the krokcommandruns API
+        description: KrokCommandRun is the Schema for the KrokCommandRuns API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation

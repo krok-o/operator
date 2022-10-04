@@ -40,7 +40,7 @@ type KrokCommandRunStatus struct {
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// KrokCommandRun is the Schema for the krokcommandruns API
+// KrokCommandRun is the Schema for the KrokCommandRuns API
 type KrokCommandRun struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

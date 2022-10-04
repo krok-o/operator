@@ -19,7 +19,7 @@ type Platform interface {
 	CreateHook(ctx context.Context, repo *v1alpha1.KrokRepository, providerToken, secret string) error
 	// ValidateRequest will take a hook and verify it being a valid hook request according to
 	// platform rules.
-	ValidateRequest(ctx context.Context, r *http.Request, secret string) error
+	ValidateRequest(ctx context.Context, r *http.Request, secret string) (bool, error)
 	// GetEventID Based on the platform, retrieve the ID of the event.
 	GetEventID(ctx context.Context, r *http.Request) (string, error)
 	// GetEventType Based on the platform, retrieve the Type of the event.

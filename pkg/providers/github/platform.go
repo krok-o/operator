@@ -35,12 +35,12 @@ func NewGithubPlatformProvider(log logr.Logger) *Platform {
 
 // ValidateRequest will take a hook and verify it being a valid hook request according to
 // GitHub's rules.
-func (g *Platform) ValidateRequest(ctx context.Context, req *http.Request, secret string) error {
+func (g *Platform) ValidateRequest(ctx context.Context, req *http.Request, secret string) (bool, error) {
 	req.Header.Set("Content-type", "application/json")
 
 	hook, err := github.New(github.Options.Secret(secret))
 	if err != nil {
-		return fmt.Errorf("failed to create github client: %w", err)
+		return false, fmt.Errorf("failed to create github client: %w", err)
 	}
 	h, err := hook.Parse(req,
 		github.CheckRunEvent,
@@ -62,8 +62,8 @@ func (g *Platform) ValidateRequest(ctx context.Context, req *http.Request, secre
 		github.MembershipEvent,
 		github.MetaEvent,
 		github.MilestoneEvent,
-		github.OrganizationEvent,
 		github.OrgBlockEvent,
+		github.OrganizationEvent,
 		github.PageBuildEvent,
 		github.PingEvent,
 		github.ProjectCardEvent,
@@ -73,6 +73,7 @@ func (g *Platform) ValidateRequest(ctx context.Context, req *http.Request, secre
 		github.PullRequestEvent,
 		github.PullRequestReviewCommentEvent,
 		github.PullRequestReviewEvent,
+		github.PushEvent,
 		github.ReleaseEvent,
 		github.RepositoryEvent,
 		github.RepositoryVulnerabilityAlertEvent,
@@ -80,14 +81,14 @@ func (g *Platform) ValidateRequest(ctx context.Context, req *http.Request, secre
 		github.StatusEvent)
 	if err != nil {
 		g.Logger.Error(err, "Failed to parse github event.")
-		return err
+		return false, err
 	}
 	switch h.(type) {
 	case github.PingPayload:
 		g.Logger.V(4).Info("All good, send back ping.")
-		return nil
+		return true, nil
 	}
-	return nil
+	return false, nil
 }
 
 // GoogleGithubRepoService is an interface defining the Wrapper Interface

@@ -73,6 +73,7 @@ func (r *KrokRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	log.V(4).Info("found repository")
 	if repository.Status.UniqueURL != "" {
+		// TODO: Think about what happens when the hook needs to be re-created because the subscribed events changed.
 		log.Info("skipping repository as it was already reconciled")
 		return ctrl.Result{}, nil
 	}

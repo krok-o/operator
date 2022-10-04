@@ -60,12 +60,16 @@ func main() {
 		hookServerAddr       string
 		hookBase             string
 		hookProtocol         string
+		namespace            string
+		commandTimeout       int
 	)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&hookServerAddr, "hook-server-bind-address", ":9998", "The address of the hook server.")
 	flag.StringVar(&hookBase, "hook-base-address", "89.134.172.87:9998", "The address of the callback that is used.")
 	flag.StringVar(&hookProtocol, "hook-protocol", "http", "The protocol at which the hook is running.")
+	flag.StringVar(&namespace, "namespace", "krok-system", "The namespace in which this controller operates in.")
+	flag.IntVar(&commandTimeout, "command-timeout", 300, "Number of seconds a command is allowed to be running.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -124,8 +128,9 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.KrokEventReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:         mgr.GetClient(),
+		Scheme:         mgr.GetScheme(),
+		CommandTimeout: commandTimeout,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KrokEvent")
 		os.Exit(1)
@@ -141,7 +146,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	hookServer := hook.NewServer(hookServerAddr, platformProviders, mgr.GetClient(), setupLog)
+	hookServer := hook.NewServer(hookServerAddr, platformProviders, mgr.GetClient(), ctrl.Log, namespace)
 
 	// start the registry
 	go func() {
