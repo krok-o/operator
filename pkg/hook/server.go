@@ -67,18 +67,18 @@ func (s *Server) Handler(w http.ResponseWriter, request *http.Request) {
 		fmt.Fprintf(w, message)
 	}
 	if !ok {
-		logAndFail(http.StatusBadRequest, fmt.Errorf("invalid or missing repository name"), "failed to run handler")
+		logAndFail(http.StatusBadRequest, fmt.Errorf("invalid or missing repository name"), "invalid or missing repository name")
 		return
 	}
 	platform, ok := vars["platform"]
 	if !ok {
-		logAndFail(http.StatusBadRequest, fmt.Errorf("invalid or missing platform identifier"), "failed to run handler")
+		logAndFail(http.StatusBadRequest, fmt.Errorf("invalid or missing platform identifier"), "invalid or missing platform identifier")
 		return
 	}
 
 	provider, ok := s.PlatformProviders[platform]
 	if !ok {
-		logAndFail(http.StatusBadRequest, fmt.Errorf("platform %q is not supported", platform), "failed to run handler")
+		logAndFail(http.StatusBadRequest, fmt.Errorf("platform %q is not supported", platform), fmt.Sprintf("platform %q is not supported", platform))
 		return
 	}
 

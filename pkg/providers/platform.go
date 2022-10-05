@@ -11,6 +11,8 @@ import (
 // work with hooks. Once a provider is selected when creating a repository
 // given the right authorization the platform provider will create the hook on this
 // repository.
+//
+//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 . Platform
 type Platform interface {
 	// CreateHook creates a hook for the respective platform.
 	// Events define the events this hook subscribes to. Since we don't want all hooks
