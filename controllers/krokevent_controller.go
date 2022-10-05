@@ -94,7 +94,7 @@ func (r *KrokEventReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if err != nil {
 			return ctrl.Result{
 				RequeueAfter: 30 * time.Second,
-			}, fmt.Errorf("failed to create jobs: %w", err)
+			}, fmt.Errorf("failed to checkout source: %w", err)
 		}
 		if err := r.reconcileCreateJobs(ctx, log, event, repository, artifactURL); err != nil {
 			return ctrl.Result{
@@ -332,7 +332,7 @@ func (r *KrokEventReconciler) reconcileSource(event *v1alpha1.KrokEvent, reposit
 
 	artifactURL, err := r.SourceController.FetchCode(provider, event, repository)
 	if err != nil {
-		return "", fmt.Errorf("")
+		return "", fmt.Errorf("failed to fetch code: %w", err)
 	}
 
 	return artifactURL, nil

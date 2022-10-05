@@ -54,6 +54,9 @@ func (s *Server) FetchCode(platform providers.Platform, event *v1alpha1.KrokEven
 	filename := filepath.Base(location)
 	s.Logger.V(4).Info("preparing to serve file with name", "name", filename)
 	newLocation := filepath.Join(s.Location, repository.Name, event.Name, "latest.zip")
+	if err := os.MkdirAll(filepath.Dir(newLocation), 0777); err != nil {
+		return "", fmt.Errorf("failed to create location '%s': %w", newLocation, err)
+	}
 	if err := os.Rename(location, newLocation); err != nil {
 		return "", fmt.Errorf("failed to move file to its new location: %w", err)
 	}

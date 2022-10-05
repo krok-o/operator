@@ -261,14 +261,14 @@ func (g *Platform) CheckoutCode(ctx context.Context, event *v1alpha1.KrokEvent, 
 		return "", fmt.Errorf("failed to create remote: %w", err)
 	}
 	if err := r.Fetch(&git.FetchOptions{
-		RefSpecs: []config.RefSpec{config.RefSpec(ref)},
+		RefSpecs: []config.RefSpec{config.RefSpec(ref + ":" + branch)},
 		Depth:    1,
 	}); err != nil {
-		return "", fmt.Errorf("failed to fetch remote ref %q: %w", ref, err)
+		return "", fmt.Errorf("failed to fetch remote ref '%s': %w", ref, err)
 	}
 	commitRef, err := r.Reference(plumbing.ReferenceName(branch), true)
 	if err != nil {
-		return "", fmt.Errorf("failed to find reference for branch %q: %w", branch, err)
+		return "", fmt.Errorf("failed to find reference for branch '%s': %w", branch, err)
 	}
 	cc, err := r.CommitObject(commitRef.Hash())
 	if err != nil {
