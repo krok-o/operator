@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: krok-source-controller
+  name: krok-hook-server
   namespace: krok-system
 spec:
   type: ClusterIP
@@ -9,6 +9,6 @@ spec:
     app: krok-controller
   ports:
     - name: http
-      port: 80
+      port: 9998
       protocol: TCP
-      targetPort: source-server
+      targetPort: hook-server

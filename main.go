@@ -137,7 +137,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	sourceControllerServer := source_controller.NewServer(ctrl.Log, sourceControllerAddr, sourceControllerArtifactBase, sourceControllerStoragePath)
+	sourceControllerServer := source_controller.NewServer(ctrl.Log, sourceControllerAddr, sourceControllerStoragePath, sourceControllerArtifactBase)
 
 	if err = (&controllers.KrokEventReconciler{
 		Client:            mgr.GetClient(),
