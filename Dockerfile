@@ -15,6 +15,7 @@ RUN go mod download
 COPY main.go main.go
 COPY api/ api/
 COPY controllers/ controllers/
+COPY pkg/ pkg/
 
 # Build
 # the GOARCH has not a default value to allow the binary be built according to the host where the command
@@ -29,7 +30,5 @@ FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532
-# data folder is used to serve files from
-RUN mkdir -p /data
 
 ENTRYPOINT ["/manager"]

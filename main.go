@@ -57,16 +57,17 @@ func init() {
 
 func main() {
 	var (
-		metricsAddr                 string
-		enableLeaderElection        bool
-		probeAddr                   string
-		hookServerAddr              string
-		sourceControllerAddr        string
-		sourceControllerStoragePath string
-		hookBase                    string
-		hookProtocol                string
-		namespace                   string
-		commandTimeout              int
+		metricsAddr                  string
+		enableLeaderElection         bool
+		probeAddr                    string
+		hookServerAddr               string
+		sourceControllerArtifactBase string
+		sourceControllerAddr         string
+		sourceControllerStoragePath  string
+		hookBase                     string
+		hookProtocol                 string
+		namespace                    string
+		commandTimeout               int
 	)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -74,6 +75,7 @@ func main() {
 	flag.StringVar(&hookBase, "hook-base-address", ":9998", "The address of the callback that is used.")
 	flag.StringVar(&hookProtocol, "hook-protocol", "http", "The protocol at which the hook is running.")
 	flag.StringVar(&sourceControllerAddr, "source-controller-address", ":9999", "The address of the source controller that is used.")
+	flag.StringVar(&sourceControllerArtifactBase, "source-controller-artifact-base", ":9999", "The base address to use when constructing the artifact URL.")
 	flag.StringVar(&sourceControllerStoragePath, "source-controller-storage-path", "/data", "The location on the filesystem from where to server files from.")
 	flag.StringVar(&namespace, "namespace", "krok-system", "The namespace in which this controller operates in.")
 	flag.IntVar(&commandTimeout, "command-timeout", 300, "Number of seconds a command is allowed to be running.")
@@ -135,7 +137,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	sourceControllerServer := source_controller.NewServer(ctrl.Log, sourceControllerAddr, sourceControllerStoragePath)
+	sourceControllerServer := source_controller.NewServer(ctrl.Log, sourceControllerAddr, sourceControllerArtifactBase, sourceControllerStoragePath)
 
 	if err = (&controllers.KrokEventReconciler{
 		Client:            mgr.GetClient(),

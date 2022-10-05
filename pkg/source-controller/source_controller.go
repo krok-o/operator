@@ -17,16 +17,18 @@ import (
 )
 
 type Server struct {
-	Addr     string
-	Location string
-	Logger   logr.Logger
+	Addr         string
+	ArtifactBase string
+	Location     string
+	Logger       logr.Logger
 }
 
-func NewServer(logger logr.Logger, addr string, location string) *Server {
+func NewServer(logger logr.Logger, addr string, location string, artifactBase string) *Server {
 	return &Server{
-		Addr:     addr,
-		Location: location,
-		Logger:   logger.WithName("source-controller"),
+		Addr:         addr,
+		ArtifactBase: artifactBase,
+		Location:     location,
+		Logger:       logger.WithName("source-controller"),
 	}
 }
 
@@ -73,7 +75,7 @@ func (s *Server) FetchCode(platform providers.Platform, event *v1alpha1.KrokEven
 }
 
 func (s *Server) determineStorageAddr() (string, error) {
-	host, port, err := net.SplitHostPort(s.Addr)
+	host, port, err := net.SplitHostPort(s.ArtifactBase)
 	if err != nil {
 		s.Logger.Error(err, "unable to parse storage address")
 		return "", fmt.Errorf("failed to determine storage address: %w", err)
