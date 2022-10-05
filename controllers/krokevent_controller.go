@@ -19,21 +19,17 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
-	apimeta "github.com/fluxcd/pkg/apis/meta"
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/go-logr/logr"
 	"github.com/krok-o/operator/pkg/providers"
+	source_controller "github.com/krok-o/operator/pkg/source-controller"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/cluster-api/util/patch"
@@ -54,6 +50,7 @@ type KrokEventReconciler struct {
 
 	CommandTimeout    int
 	PlatformProviders map[string]providers.Platform
+	SourceController  *source_controller.Server
 }
 
 //+kubebuilder:rbac:groups=delivery.krok.app,resources=krokevents,verbs=get;list;watch;create;update;patch;delete
@@ -93,7 +90,7 @@ func (r *KrokEventReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	log.V(4).Info("found repository", "repository", klog.KObj(repository))
 	if len(event.Status.Jobs) == 0 {
 		log.V(4).Info("event has no jobs, creating them", "event", klog.KObj(event))
-		artifactURL, err := r.reconcileGitRepository(ctx, log, event, repository)
+		artifactURL, err := r.reconcileSource(event, repository)
 		if err != nil {
 			return ctrl.Result{
 				RequeueAfter: 30 * time.Second,
@@ -326,79 +323,17 @@ var contains = func(list []string, item string) bool {
 	return false
 }
 
-// reconcileGitRepository will create a GitRepository object and wait for it to be reconciled.
-// Once the reconciliation of the repository is done it will return the artifact URL for the other commands to access.
-func (r *KrokEventReconciler) reconcileGitRepository(ctx context.Context, logger logr.Logger, event *v1alpha1.KrokEvent, repository *v1alpha1.KrokRepository) (string, error) {
-	if !contains(eventsWhichNeedSourceCode, event.Spec.Type) {
-		// Repository does not require code.
-		return "", nil
-	}
-	gitRepository := &sourcev1.GitRepository{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "GitRepository",
-			APIVersion: sourcev1.GroupVersion.Group,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-%s-%d", repository.Name, event.Name, time.Now().Unix()),
-			Namespace: event.Namespace,
-		},
-		Spec: sourcev1.GitRepositorySpec{
-			URL: repository.Spec.URL,
-			SecretRef: &apimeta.LocalObjectReference{
-				Name: repository.Spec.AuthSecretRef.Name,
-			},
-			Interval: metav1.Duration{
-				Duration: 30 * time.Minute,
-			},
-		},
-	}
-
+// reconcileSource will fetch the code content based on the given repository parameters.
+func (r *KrokEventReconciler) reconcileSource(event *v1alpha1.KrokEvent, repository *v1alpha1.KrokRepository) (string, error) {
 	provider, ok := r.PlatformProviders[repository.Spec.Platform]
 	if !ok {
 		return "", fmt.Errorf("platform %q not supported", repository.Spec.Platform)
 	}
 
-	ref, err := provider.GetRefIfPresent(ctx, event)
+	artifactURL, err := r.SourceController.FetchCode(provider, event, repository)
 	if err != nil {
-		return "", fmt.Errorf("failed to get ref for event: %w", err)
+		return "", fmt.Errorf("")
 	}
 
-	if ref == "not-found" {
-		// There is no ref.
-		return "", nil
-	}
-
-	if strings.Contains(ref, "tags") {
-		split := strings.Split(ref, "/")
-		gitRepository.Spec.Reference = &sourcev1.GitRepositoryRef{
-			Tag: split[len(split)-1],
-		}
-	} else if strings.Contains(ref, "heads") {
-		split := strings.Split(ref, "/")
-		gitRepository.Spec.Reference = &sourcev1.GitRepositoryRef{
-			Branch: split[len(split)-1],
-		}
-	}
-
-	if err := r.Create(ctx, gitRepository); err != nil {
-		return "", fmt.Errorf("failed to create GitRepository: %w", err)
-	}
-	logger.V(4).Info("waiting for gitRepository to be reconciled")
-	if err := wait.PollImmediate(2*time.Second, 1*time.Minute,
-		func() (done bool, err error) {
-			namespacedName := types.NamespacedName{
-				Namespace: gitRepository.GetNamespace(),
-				Name:      gitRepository.GetName(),
-			}
-			if err := r.Get(ctx, namespacedName, gitRepository); err != nil {
-				return false, err
-			}
-			return meta.IsStatusConditionTrue(gitRepository.Status.Conditions, apimeta.ReadyCondition), nil
-		}); err != nil {
-		return "", fmt.Errorf("failed to reconcile GitRepository: %w", err)
-	}
-	if gitRepository.Status.Artifact == nil {
-		return "", fmt.Errorf("failed to reconcile artifact, was nil")
-	}
-	return gitRepository.Status.Artifact.URL, nil
+	return artifactURL, nil
 }

@@ -29,5 +29,7 @@ FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532
+# data folder is used to serve files from
+RUN mkdir -p /data
 
 ENTRYPOINT ["/manager"]

@@ -1,15 +1,26 @@
 package github
 
 import (
+	"archive/zip"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/go-git/go-billy/v5/osfs"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/cache"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/storage/filesystem"
 	"github.com/go-logr/logr"
 	ggithub "github.com/google/go-github/github"
 	"golang.org/x/oauth2"
@@ -193,23 +204,113 @@ func (g *Platform) CreateHook(ctx context.Context, repo *v1alpha1.KrokRepository
 }
 
 // GetRefIfPresent returns a Ref if the payload contains one.
-func (g *Platform) GetRefIfPresent(ctx context.Context, event *v1alpha1.KrokEvent) (string, error) {
-	var ref string
+func (g *Platform) GetRefIfPresent(ctx context.Context, event *v1alpha1.KrokEvent) (string, string, error) {
+	var (
+		ref    string
+		branch string
+	)
 	switch event.Spec.Type {
 	case string(github.PullRequestEvent):
 		payload := &github.PullRequestPayload{}
 		if err := json.Unmarshal([]byte(event.Spec.Payload), payload); err != nil {
-			return "", fmt.Errorf("failed to unmarshall payload: %w", err)
+			return "", "", fmt.Errorf("failed to unmarshall payload: %w", err)
 		}
-		ref = payload.PullRequest.Head.Ref
+		ref = fmt.Sprintf("pull/%d/head:%s", payload.Number, payload.PullRequest.Base.Ref)
+		branch = payload.PullRequest.Base.Ref
 	case string(github.PushEvent):
 		payload := &github.PushPayload{}
 		if err := json.Unmarshal([]byte(event.Spec.Payload), payload); err != nil {
-			return "", fmt.Errorf("failed to unmarshall payload: %w", err)
+			return "", "", fmt.Errorf("failed to unmarshall payload: %w", err)
 		}
 		ref = payload.Ref
+		split := strings.Split(ref, "/")
+		branch = split[len(split)-1]
 	default:
-		return "not-found", nil
+		return "not-found", "", nil
 	}
-	return ref, nil
+	return ref, branch, nil
+}
+
+// CheckoutCode will get the code given an event which needs the codebase.
+// It will create a ZIP file from the source code which is offered by a server running a file-server with given URLs for
+// each artifact.
+func (g *Platform) CheckoutCode(ctx context.Context, event *v1alpha1.KrokEvent, repository *v1alpha1.KrokRepository) (string, error) {
+	ref, branch, err := g.GetRefIfPresent(ctx, event)
+	if err != nil {
+		return "", fmt.Errorf("failed to get ref: %w", err)
+	}
+	if ref == "not-found" {
+		// No ref, no need to check out the code.
+		return "", nil
+	}
+
+	// TODO: Find the right location for this
+	dir, err := os.MkdirTemp("", "clone")
+	if err != nil {
+		return "", fmt.Errorf("failed to initialise temp folder: %w", err)
+	}
+	fs := osfs.New(dir)
+	r, err := git.Init(filesystem.NewStorage(fs, cache.NewObjectLRUDefault()), nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to initialise git repo: %w", err)
+	}
+	if _, err = r.CreateRemote(&config.RemoteConfig{
+		Name: "origin",
+		URLs: []string{repository.Spec.URL},
+	}); err != nil {
+		return "", fmt.Errorf("failed to create remote: %w", err)
+	}
+	if err := r.Fetch(&git.FetchOptions{
+		RefSpecs: []config.RefSpec{config.RefSpec(ref)},
+		Depth:    1,
+	}); err != nil {
+		return "", fmt.Errorf("failed to fetch remote ref %q: %w", ref, err)
+	}
+	commitRef, err := r.Reference(plumbing.ReferenceName(branch), true)
+	if err != nil {
+		return "", fmt.Errorf("failed to find reference for branch %q: %w", branch, err)
+	}
+	cc, err := r.CommitObject(commitRef.Hash())
+	if err != nil {
+		return "", fmt.Errorf("failed to get commit object: %w", err)
+	}
+	tree, err := r.TreeObject(cc.TreeHash)
+	if err != nil {
+		return "", fmt.Errorf("failed to create TreeObject: %w", err)
+	}
+	zipFilePath := filepath.Join(dir, fmt.Sprintf("%s-%s-%s", repository.Name, event.Name, branch))
+	zipFile, err := os.Create(zipFilePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to create zipfile: %w", err)
+	}
+	defer zipFile.Close()
+	z := zip.NewWriter(zipFile)
+	defer z.Close()
+	addFile := func(f *object.File) error {
+		fw, err := z.Create(f.Name)
+		if err != nil {
+			return err
+		}
+
+		fr, err := f.Reader()
+		if err != nil {
+			return err
+		}
+
+		_, err = io.Copy(fw, fr)
+		if err != nil {
+			return err
+		}
+
+		return fr.Close()
+	}
+
+	if err := tree.Files().ForEach(addFile); err != nil {
+		return "", fmt.Errorf("failed to traverse tree object: %w", err)
+	}
+
+	// The calling source_controller will take this file and place it under
+	// /data/{repository}/{event}/{branch}.zip
+	// And then, the URL for that will be http://{service}/data/{repository}/{event}/{branch}.zip
+	return zipFilePath, nil
 }

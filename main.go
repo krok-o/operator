@@ -24,6 +24,7 @@ import (
 	"github.com/krok-o/operator/pkg/hook"
 	"github.com/krok-o/operator/pkg/providers"
 	"github.com/krok-o/operator/pkg/providers/github"
+	source_controller "github.com/krok-o/operator/pkg/source-controller"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -56,20 +57,24 @@ func init() {
 
 func main() {
 	var (
-		metricsAddr          string
-		enableLeaderElection bool
-		probeAddr            string
-		hookServerAddr       string
-		hookBase             string
-		hookProtocol         string
-		namespace            string
-		commandTimeout       int
+		metricsAddr                 string
+		enableLeaderElection        bool
+		probeAddr                   string
+		hookServerAddr              string
+		sourceControllerAddr        string
+		sourceControllerStoragePath string
+		hookBase                    string
+		hookProtocol                string
+		namespace                   string
+		commandTimeout              int
 	)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&hookServerAddr, "hook-server-bind-address", ":9998", "The address of the hook server.")
-	flag.StringVar(&hookBase, "hook-base-address", "89.134.172.87:9998", "The address of the callback that is used.")
+	flag.StringVar(&hookBase, "hook-base-address", ":9998", "The address of the callback that is used.")
 	flag.StringVar(&hookProtocol, "hook-protocol", "http", "The protocol at which the hook is running.")
+	flag.StringVar(&sourceControllerAddr, "source-controller-address", ":9999", "The address of the source controller that is used.")
+	flag.StringVar(&sourceControllerStoragePath, "source-controller-storage-path", "/data", "The location on the filesystem from where to server files from.")
 	flag.StringVar(&namespace, "namespace", "krok-system", "The namespace in which this controller operates in.")
 	flag.IntVar(&commandTimeout, "command-timeout", 300, "Number of seconds a command is allowed to be running.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -129,11 +134,15 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "KrokCommand")
 		os.Exit(1)
 	}
+
+	sourceControllerServer := source_controller.NewServer(ctrl.Log, sourceControllerAddr, sourceControllerStoragePath)
+
 	if err = (&controllers.KrokEventReconciler{
 		Client:            mgr.GetClient(),
 		Scheme:            mgr.GetScheme(),
 		CommandTimeout:    commandTimeout,
 		PlatformProviders: platformProviders,
+		SourceController:  sourceControllerServer,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KrokEvent")
 		os.Exit(1)
@@ -151,7 +160,7 @@ func main() {
 
 	hookServer := hook.NewServer(hookServerAddr, platformProviders, mgr.GetClient(), ctrl.Log, namespace)
 
-	// start the registry
+	// start the hook server
 	go func() {
 		<-mgr.Elected()
 
@@ -159,6 +168,17 @@ func main() {
 
 		if err := hookServer.ListenAndServe(); err != nil {
 			setupLog.Error(err, "failed to start hook server")
+			os.Exit(1)
+		}
+	}()
+	// start the source-controller
+	go func() {
+		<-mgr.Elected()
+
+		setupLog.Info("starting source-controller")
+
+		if err := sourceControllerServer.ServeStaticFiles(); err != nil {
+			setupLog.Error(err, "failed to start source-controller server")
 			os.Exit(1)
 		}
 	}()
