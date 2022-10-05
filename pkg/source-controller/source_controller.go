@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -48,34 +47,32 @@ func (s *Server) ServeStaticFiles() error {
 }
 
 func (s *Server) FetchCode(platform providers.Platform, event *v1alpha1.KrokEvent, repository *v1alpha1.KrokRepository) (string, error) {
-	location, err := platform.CheckoutCode(context.Background(), event, repository)
+	location, err := platform.CheckoutCode(context.Background(), event, repository, s.Location)
 	if err != nil {
 		return "", fmt.Errorf("failed to checkout code: %w", err)
 	}
-	// move file under serving location
-	filename := filepath.Base(location)
-	s.Logger.V(4).Info("preparing to serve file with name", "name", filename)
-	newLocation := filepath.Join(s.Location, repository.Name, event.Name, "latest.zip")
-	if err := os.MkdirAll(filepath.Dir(newLocation), 0777); err != nil {
-		return "", fmt.Errorf("failed to create location '%s': %w", newLocation, err)
+	// No need for checkout logic.
+	if location == "" {
+		return "", nil
 	}
-	if err := os.Rename(location, newLocation); err != nil {
-		return "", fmt.Errorf("failed to move file to its new location: %w", err)
-	}
-	hostname, err := s.determineStorageAddr()
-	if err != nil {
-		return "", fmt.Errorf("failed to determine storage address: %w", err)
+	if s.ArtifactBase == "" {
+		addr, err := s.determineStorageAddr()
+		if err != nil {
+			return "", fmt.Errorf("failed to determine hostname: %w", err)
+		}
+		s.ArtifactBase = addr
 	}
 	format := "http://%s/%s"
-	if strings.HasPrefix(hostname, "http://") || strings.HasPrefix(hostname, "https://") {
+	if strings.HasPrefix(s.ArtifactBase, "http://") || strings.HasPrefix(s.ArtifactBase, "https://") {
 		format = "%s/%s"
 	}
-	url := fmt.Sprintf(format, hostname, strings.TrimLeft(newLocation, "/"))
+
+	url := fmt.Sprintf(format, s.ArtifactBase, strings.TrimLeft(location, "/"))
 	return url, nil
 }
 
 func (s *Server) determineStorageAddr() (string, error) {
-	host, port, err := net.SplitHostPort(s.ArtifactBase)
+	host, port, err := net.SplitHostPort(s.Addr)
 	if err != nil {
 		s.Logger.Error(err, "unable to parse storage address")
 		return "", fmt.Errorf("failed to determine storage address: %w", err)

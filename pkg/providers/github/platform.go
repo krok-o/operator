@@ -234,7 +234,7 @@ func (g *Platform) GetRefIfPresent(ctx context.Context, event *v1alpha1.KrokEven
 // CheckoutCode will get the code given an event which needs the codebase.
 // It will create a ZIP file from the source code which is offered by a server running a file-server with given URLs for
 // each artifact.
-func (g *Platform) CheckoutCode(ctx context.Context, event *v1alpha1.KrokEvent, repository *v1alpha1.KrokRepository) (string, error) {
+func (g *Platform) CheckoutCode(ctx context.Context, event *v1alpha1.KrokEvent, repository *v1alpha1.KrokRepository, location string) (string, error) {
 	ref, branch, err := g.GetRefIfPresent(ctx, event)
 	if err != nil {
 		return "", fmt.Errorf("failed to get ref: %w", err)
@@ -278,8 +278,11 @@ func (g *Platform) CheckoutCode(ctx context.Context, event *v1alpha1.KrokEvent, 
 	if err != nil {
 		return "", fmt.Errorf("failed to create TreeObject: %w", err)
 	}
-	zipFilePath := filepath.Join(dir, fmt.Sprintf("%s-%s-%s", repository.Name, event.Name, branch))
-	zipFile, err := os.Create(zipFilePath)
+	newLocation := filepath.Join(location, repository.Name, event.Name, branch+".zip")
+	if err := os.MkdirAll(filepath.Dir(newLocation), 0777); err != nil {
+		return "", fmt.Errorf("failed to create location '%s': %w", newLocation, err)
+	}
+	zipFile, err := os.Create(newLocation)
 	if err != nil {
 		return "", fmt.Errorf("failed to create zipfile: %w", err)
 	}
@@ -312,5 +315,5 @@ func (g *Platform) CheckoutCode(ctx context.Context, event *v1alpha1.KrokEvent, 
 	// The calling source_controller will take this file and place it under
 	// /data/{repository}/{event}/{branch}.zip
 	// And then, the URL for that will be http://{service}/data/{repository}/{event}/{branch}.zip
-	return zipFilePath, nil
+	return newLocation, nil
 }

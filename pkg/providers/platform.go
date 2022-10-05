@@ -27,5 +27,5 @@ type Platform interface {
 	// GetRefIfPresent returns a Ref if the payload contains one.
 	GetRefIfPresent(ctx context.Context, event *v1alpha1.KrokEvent) (string, string, error)
 	// CheckoutCode will get the code given an event which needs the codebase.
-	CheckoutCode(ctx context.Context, event *v1alpha1.KrokEvent, repository *v1alpha1.KrokRepository) (string, error)
+	CheckoutCode(ctx context.Context, event *v1alpha1.KrokEvent, repository *v1alpha1.KrokRepository, location string) (string, error)
 }

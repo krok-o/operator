@@ -245,19 +245,32 @@ func (r *KrokEventReconciler) reconcileCreateJobs(ctx context.Context, logger lo
 }
 
 func (r *KrokEventReconciler) reconcileExistingJobs(ctx context.Context, logger logr.Logger, event *v1alpha1.KrokEvent, repository *v1alpha1.KrokRepository) (bool, error) {
+	// Initialize the patch helper.
+	// This has to be initialized before updating the status.
+	patchHelper, err := patch.NewHelper(event, r.Client)
+	if err != nil {
+		return false, fmt.Errorf("failed to create patch helper: %w", err)
+	}
+
 	var (
 		done   = true
 		failed bool
 	)
-	for _, jobRef := range event.Status.Jobs {
+	for i := 0; i < len(event.Status.Jobs); i++ {
 		// refresh the status of jobs
-		jobRef := jobRef
+		jobRef := event.Status.Jobs[i]
 
 		job := &batchv1.Job{}
 		if err := r.Client.Get(ctx, types.NamespacedName{
 			Namespace: jobRef.Namespace,
 			Name:      jobRef.Name,
 		}, job); err != nil {
+			if apierrors.IsNotFound(err) {
+				// Job has been removed manually, remove it from the list.
+				event.Status.Jobs = append(event.Status.Jobs[:i], event.Status.Jobs[i+1:]...)
+				i--
+				continue
+			}
 			return false, fmt.Errorf("failed to get job object: %w", err)
 		}
 		if job.Status.Active > 0 {
@@ -269,13 +282,6 @@ func (r *KrokEventReconciler) reconcileExistingJobs(ctx context.Context, logger 
 				failed = true
 			}
 		}
-	}
-
-	// Initialize the patch helper.
-	// This has to be initialized before updating the status.
-	patchHelper, err := patch.NewHelper(event, r.Client)
-	if err != nil {
-		return done, fmt.Errorf("failed to create patch helper: %w", err)
 	}
 
 	event.Status.Done = false
