@@ -3,7 +3,6 @@ package hook
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -27,15 +26,17 @@ type Server struct {
 	Client            client.Client
 	Logger            logr.Logger
 	Namespace         string
+	Clock             providers.Clock
 }
 
-func NewServer(addr string, platformProviders map[string]providers.Platform, client client.Client, log logr.Logger, namespace string) *Server {
+func NewServer(addr string, platformProviders map[string]providers.Platform, client client.Client, log logr.Logger, namespace string, clock providers.Clock) *Server {
 	return &Server{
 		Address:           addr,
 		PlatformProviders: platformProviders,
 		Client:            client,
 		Logger:            log.WithName("handler-logger"),
 		Namespace:         namespace,
+		Clock:             clock,
 	}
 }
 
@@ -96,7 +97,7 @@ func (s *Server) Handler(w http.ResponseWriter, request *http.Request) {
 		Name:      repository.Spec.AuthSecretRef.Name,
 		Namespace: repository.Spec.AuthSecretRef.Namespace,
 	}, auth); err != nil {
-		logAndFail(http.StatusBadRequest, err, "failed to find associated provider object")
+		logAndFail(http.StatusBadRequest, err, "failed to find associated auth secret")
 		return
 	}
 
@@ -128,13 +129,6 @@ func (s *Server) Handler(w http.ResponseWriter, request *http.Request) {
 		return
 	}
 
-	// Get the REF from the payload.
-	payload := &Payload{}
-	if err := json.Unmarshal(content, payload); err != nil {
-		logAndFail(http.StatusInternalServerError, err, "failed to parse payload and get ref")
-		return
-	}
-
 	// This should only happen if it wasn't a `Ping` event which is the initial registration.
 	eventType, err := provider.GetEventType(context.Background(), request)
 	if err != nil {
@@ -151,9 +145,8 @@ func (s *Server) Handler(w http.ResponseWriter, request *http.Request) {
 			Namespace: repository.Namespace,
 		},
 		Spec: v1alpha1.KrokEventSpec{
-			Payload:   string(content),
-			Type:      eventType,
-			CommitRef: payload.Ref,
+			Payload: string(content),
+			Type:    eventType,
 		},
 	}
 	// Set external object ControllerReference to the provider ref.
@@ -170,5 +163,5 @@ func (s *Server) Handler(w http.ResponseWriter, request *http.Request) {
 }
 
 func (s *Server) generateEventName(repoName string) string {
-	return fmt.Sprintf("%s-event-%d", repoName, time.Now().Unix())
+	return fmt.Sprintf("%s-event-%d", repoName, s.Clock.Now().Unix())
 }

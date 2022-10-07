@@ -21,8 +21,10 @@ import (
 	"os"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
+
 	"github.com/krok-o/operator/pkg/hook"
 	"github.com/krok-o/operator/pkg/providers"
+	"github.com/krok-o/operator/pkg/providers/clock"
 	"github.com/krok-o/operator/pkg/providers/github"
 	source_controller "github.com/krok-o/operator/pkg/source-controller"
 
@@ -160,7 +162,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	hookServer := hook.NewServer(hookServerAddr, platformProviders, mgr.GetClient(), ctrl.Log, namespace)
+	realClock := clock.NewClock()
+	hookServer := hook.NewServer(hookServerAddr, platformProviders, mgr.GetClient(), ctrl.Log, namespace, realClock)
 
 	// start the hook server
 	go func() {

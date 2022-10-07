@@ -46,10 +46,6 @@ spec:
                 - name
                 - namespace
                 type: object
-              commitRef:
-                description: CommitRef is the ref of the commit which triggered the
-                  event.
-                type: string
               payload:
                 description: Payload is the received event payload from the provider.
                 type: string
@@ -58,7 +54,6 @@ spec:
                 type: string
             required:
             - commandRun
-            - commitRef
             - payload
             - type
             type: object

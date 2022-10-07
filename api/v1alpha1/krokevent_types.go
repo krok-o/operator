@@ -26,8 +26,6 @@ type KrokEventSpec struct {
 	CommandRun Ref `json:"commandRun"`
 	// Payload is the received event payload from the provider.
 	Payload string `json:"payload"`
-	// CommitRef is the ref of the commit which triggered the event.
-	CommitRef string `json:"commitRef"`
 	// Type defines the event type such as: push, pull, ping...
 	Type string `json:"type"`
 }
