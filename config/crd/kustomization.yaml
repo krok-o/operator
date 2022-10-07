@@ -4,8 +4,6 @@
 resources:
 - bases/delivery.krok.app_krokrepositories.yaml
 - bases/delivery.krok.app_krokcommands.yaml
-- bases/delivery.krok.app_krokplatforms.yaml
-- bases/delivery.krok.app_krokcommandruns.yaml
 - bases/delivery.krok.app_krokevents.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
@@ -14,8 +12,6 @@ patchesStrategicMerge:
 # patches here are for enabling the conversion webhook for each CRD
 #- patches/webhook_in_krokrepositories.yaml
 #- patches/webhook_in_krokcommands.yaml
-#- patches/webhook_in_krokplatforms.yaml
-#- patches/webhook_in_krokcommandruns.yaml
 #- patches/webhook_in_krokevents.yaml
 #+kubebuilder:scaffold:crdkustomizewebhookpatch
 
@@ -23,8 +19,6 @@ patchesStrategicMerge:
 # patches here are for enabling the CA injection for each CRD
 #- patches/cainjection_in_krokrepositories.yaml
 #- patches/cainjection_in_krokcommands.yaml
-#- patches/cainjection_in_krokplatforms.yaml
-#- patches/cainjection_in_krokcommandruns.yaml
 #- patches/cainjection_in_krokevents.yaml
 #+kubebuilder:scaffold:crdkustomizecainjectionpatch
 

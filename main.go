@@ -131,13 +131,6 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "KrokRepository")
 		os.Exit(1)
 	}
-	if err = (&controllers.KrokCommandReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "KrokCommand")
-		os.Exit(1)
-	}
 
 	sourceControllerServer := source_controller.NewServer(ctrl.Log, sourceControllerAddr, sourceControllerStoragePath, sourceControllerArtifactBase)
 

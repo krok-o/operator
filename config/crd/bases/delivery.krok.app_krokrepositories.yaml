@@ -138,17 +138,6 @@ spec:
                           description: KrokEventSpec defines the desired state of
                             KrokEvent
                           properties:
-                            commandRun:
-                              description: CommandRun will be set once created.
-                              properties:
-                                name:
-                                  type: string
-                                namespace:
-                                  type: string
-                              required:
-                              - name
-                              - namespace
-                              type: object
                             payload:
                               description: Payload is the received event payload from
                                 the provider.
@@ -158,7 +147,6 @@ spec:
                                 pull, ping...'
                               type: string
                           required:
-                          - commandRun
                           - payload
                           - type
                           type: object

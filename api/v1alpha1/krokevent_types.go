@@ -22,8 +22,6 @@ import (
 
 // KrokEventSpec defines the desired state of KrokEvent
 type KrokEventSpec struct {
-	// CommandRun will be set once created.
-	CommandRun Ref `json:"commandRun"`
 	// Payload is the received event payload from the provider.
 	Payload string `json:"payload"`
 	// Type defines the event type such as: push, pull, ping...

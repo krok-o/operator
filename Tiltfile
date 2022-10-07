@@ -118,6 +118,6 @@ def build_docker_image(image, context, binary_name, port_forwards):
     )
 
 
-k8s_yaml(['config/crd/bases/delivery.krok.app_krokcommandruns.yaml', 'config/crd/bases/delivery.krok.app_krokcommands.yaml', 'config/crd/bases/delivery.krok.app_krokevents.yaml', 'config/crd/bases/delivery.krok.app_krokrepositories.yaml'])
+k8s_yaml(['config/crd/bases/delivery.krok.app_krokcommands.yaml', 'config/crd/bases/delivery.krok.app_krokevents.yaml', 'config/crd/bases/delivery.krok.app_krokrepositories.yaml'])
 # TODO: Add Deployment yaml files and use k8s_resource...
 deploy_controller()
