@@ -20,6 +20,8 @@ import (
 	"github.com/krok-o/operator/pkg/providers"
 )
 
+var jobFinalizer = "event.krok.app/finalizer"
+
 type Server struct {
 	Address           string
 	PlatformProviders map[string]providers.Platform
@@ -149,6 +151,7 @@ func (s *Server) Handler(w http.ResponseWriter, request *http.Request) {
 			Type:    eventType,
 		},
 	}
+	controllerutil.AddFinalizer(event, jobFinalizer)
 	// Set external object ControllerReference to the provider ref.
 	if err := controllerutil.SetControllerReference(repository, event, s.Client.Scheme()); err != nil {
 		logAndFail(http.StatusInternalServerError, err, "failed to set owner reference for created event")

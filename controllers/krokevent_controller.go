@@ -199,11 +199,9 @@ func (r *KrokEventReconciler) reconcileCreateJobs(ctx context.Context, logger lo
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:           "command",
-								Image:          command.Spec.Image,
-								Args:           args,
-								LivenessProbe:  nil,
-								ReadinessProbe: nil,
+								Name:  "command",
+								Image: command.Spec.Image,
+								Args:  args,
 							},
 						},
 						RestartPolicy: "Never",
@@ -375,12 +373,25 @@ func (r *KrokEventReconciler) reconcileDelete(ctx context.Context, event *v1alph
 
 		// Remove our finalizer from the list and update it
 		controllerutil.RemoveFinalizer(job, jobFinalizer)
-		if err := r.Client.Delete(ctx, job); err != nil {
+		if err := r.Client.Update(ctx, job); err != nil {
 			log.Error(err, "failed to remove job")
+			return ctrl.Result{
+				RequeueAfter: 20 * time.Second,
+			}, fmt.Errorf("failed to update job: %w", err)
+		}
+		background := metav1.DeletePropagationBackground
+		if err := r.Client.Delete(ctx, job, &client.DeleteOptions{
+			PropagationPolicy: &background,
+		}); err != nil {
+			log.Error(err, "failed to remove job")
+			return ctrl.Result{
+				RequeueAfter: 20 * time.Second,
+			}, fmt.Errorf("failed to remove job: %w", err)
 		}
 	}
 
 	// Remove our finalizer from the list and update it
+	// propagationPolicy=
 	controllerutil.RemoveFinalizer(event, jobFinalizer)
 
 	if err := r.Update(ctx, event); err != nil {
