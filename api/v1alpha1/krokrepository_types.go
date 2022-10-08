@@ -32,6 +32,12 @@ type Ref struct {
 	Namespace string `json:"namespace"`
 }
 
+type CommandRef struct {
+	Ref `json:",inline"`
+	// +optional
+	Parallel bool `json:"parallel,omitempty"`
+}
+
 // KrokRepositorySpec defines the desired state of KrokRepository
 type KrokRepositorySpec struct {
 	// URL of the repository.
@@ -52,7 +58,7 @@ type KrokRepositorySpec struct {
 	ProviderTokenSecretRef Ref `json:"providerTokenSecretRef"`
 	// Commands contains all the commands which this repository is attached to.
 	// +optional
-	Commands []Ref `json:"commands,omitempty"`
+	Commands []CommandRef `json:"commands,omitempty"`
 	// Events contains all events that this repository subscribes to.
 	Events []string `json:"events,omitempty"`
 }

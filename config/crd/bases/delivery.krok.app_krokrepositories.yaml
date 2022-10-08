@@ -51,13 +51,13 @@ spec:
                 description: Commands contains all the commands which this repository
                   is attached to.
                 items:
-                  description: Ref points to a secret which contains access information
-                    for the repository.
                   properties:
                     name:
                       type: string
                     namespace:
                       type: string
+                    parallel:
+                      type: boolean
                   required:
                   - name
                   - namespace

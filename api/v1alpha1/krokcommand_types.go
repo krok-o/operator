@@ -22,6 +22,9 @@ import (
 
 // KrokCommandSpec defines the desired state of KrokCommand
 type KrokCommandSpec struct {
+	// Args defines an optional number of arguments to pass to this command.
+	// +optional
+	Args []string `json:"args,omitempty"`
 	// Schedule of the command.
 	// example: 0 * * * * // follows cron job syntax.
 	// +optional
@@ -35,13 +38,6 @@ type KrokCommandSpec struct {
 	// Platforms holds all the platforms which this command supports.
 	// +optional
 	Platforms []string `json:"platforms,omitempty"`
-	// RequiresClone defines if this command wants to clone the repository
-	// and thus, requires auth information from the repository (which should have it).
-	//
-	// required: false
-	// TODO: Think about this. Maybe use GitRepository or Flux to reconcile the source so every command has
-	// access to it implicitly.
-	//RequiresClone bool `json:"requires_clone"`
 }
 
 // KrokCommandStatus defines the observed state of KrokCommand

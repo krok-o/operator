@@ -35,6 +35,12 @@ spec:
           spec:
             description: KrokCommandSpec defines the desired state of KrokCommand
             properties:
+              args:
+                description: Args defines an optional number of arguments to pass
+                  to this command.
+                items:
+                  type: string
+                type: array
               enabled:
                 description: Enabled defines if this command can be executed or not.
                 type: boolean

@@ -15,5 +15,11 @@ spec:
   events:
     - push
   commands:
-    - namespace: krok-system
-      name: slack-command
+    - name: test-code
+      namespace: krok-system
+    - name: slack-command
+      namespace: krok-system
+      parallel: true
+    - name: signal-command
+      namespace: krok-system
+      parallel: true

@@ -22,8 +22,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/krok-o/operator/pkg/providers"
-	source_controller "github.com/krok-o/operator/pkg/source-controller"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -37,8 +35,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/krok-o/operator/api/v1alpha1"
+	"github.com/krok-o/operator/pkg/providers"
+	source_controller "github.com/krok-o/operator/pkg/source-controller"
 )
 
 var jobFinalizer = "event.krok.app/finalizer"
@@ -74,6 +75,10 @@ func (r *KrokEventReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	log.Info("found event", "event", klog.KObj(event))
+
+	if event.DeletionTimestamp != nil {
+		return r.reconcileDelete(ctx, event)
+	}
 
 	if event.Status.Done {
 		log.Info("skip event as it's already done")
@@ -131,6 +136,7 @@ func (r *KrokEventReconciler) generateJobName(commandName string) string {
 func (r *KrokEventReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.KrokEvent{}).
+		WithEventFilter(predicate.Or(ArtifactUpdatePredicate{}, DeletePredicate{})).
 		Complete(r)
 }
 
@@ -215,7 +221,7 @@ func (r *KrokEventReconciler) reconcileCreateJobs(ctx context.Context, logger lo
 		// Since this is a brand-new object, we can be sure that it will be an update.
 		controllerutil.AddFinalizer(job, jobFinalizer)
 
-		if err := r.Create(context.Background(), job); err != nil {
+		if err := r.Create(ctx, job); err != nil {
 			return fmt.Errorf("failed to create job: %w", err)
 		}
 		jobList = append(jobList, v1alpha1.Ref{
@@ -342,4 +348,49 @@ func (r *KrokEventReconciler) reconcileSource(event *v1alpha1.KrokEvent, reposit
 	}
 
 	return artifactURL, nil
+}
+
+func (r *KrokEventReconciler) reconcileDelete(ctx context.Context, event *v1alpha1.KrokEvent) (ctrl.Result, error) {
+	log := logr.FromContextOrDiscard(ctx).WithValues("event", klog.KObj(event))
+
+	log.Info("deleting event and jobs")
+
+	for i := 0; i < len(event.Status.Jobs); i++ {
+		job := &batchv1.Job{}
+		if err := r.Client.Get(ctx, types.NamespacedName{
+			Namespace: event.Status.Jobs[i].Namespace,
+			Name:      event.Status.Jobs[i].Name,
+		}, job); err != nil {
+			if apierrors.IsNotFound(err) {
+				event.Status.Jobs = append(event.Status.Jobs[:i], event.Status.Jobs[i+1:]...)
+				i--
+				continue
+			}
+
+			log.Error(err, "failed to remove job from event")
+			return ctrl.Result{
+				RequeueAfter: 20 * time.Second,
+			}, fmt.Errorf("failed to remove job from event: %w", err)
+		}
+
+		// Remove our finalizer from the list and update it
+		controllerutil.RemoveFinalizer(job, jobFinalizer)
+		if err := r.Client.Delete(ctx, job); err != nil {
+			log.Error(err, "failed to remove job")
+		}
+	}
+
+	// Remove our finalizer from the list and update it
+	controllerutil.RemoveFinalizer(event, jobFinalizer)
+
+	if err := r.Update(ctx, event); err != nil {
+		log.Error(err, "failed to update event to remove the finalizer")
+		return ctrl.Result{
+			RequeueAfter: 10 * time.Second,
+		}, err
+	}
+
+	log.Info("removed finalizer from event")
+	// Stop reconciliation as the object is being deleted
+	return ctrl.Result{}, nil
 }
