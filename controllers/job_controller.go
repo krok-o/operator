@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/cluster-api/util/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -25,6 +26,8 @@ import (
 var (
 	krokAnnotationValue = "krokjob"
 	krokAnnotationKey   = "krok.app"
+	dependenciesKey     = "jobDependencies"
+	outputKey           = "jobOutput"
 )
 
 // JobReconciler reconciles Job objects
@@ -64,6 +67,9 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 	log.V(4).Info("found owner", "owner", klog.KObj(owner))
 
+	// TODO: If it has a dependency, requeue an leave suspended until dependent job is done. If dependent job failed
+	// make this job fail as well.
+
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		return ctrl.Result{
@@ -80,6 +86,11 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	// job-name=slack-command-job-1665307554
 	pods, err := clientset.CoreV1().Pods(job.Namespace).List(ctx,
 		v1.ListOptions{LabelSelector: fmt.Sprintf("job-name=%s", job.Name)})
+	if err != nil {
+		return ctrl.Result{
+			RequeueAfter: 30 * time.Second,
+		}, fmt.Errorf("failed to list pods: %w", err)
+	}
 
 	getLogs := func(pod *corev1.Pod) ([]byte, error) {
 		podReq := clientset.CoreV1().Pods(job.Namespace).GetLogs(pod.Name, &corev1.PodLogOptions{})
@@ -94,15 +105,27 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}
 		return content, nil
 	}
+	var compoundedLogs string
 	for _, pod := range pods.Items {
 		podLogs, err := getLogs(&pod)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		// update the owner and add the output.
+		compoundedLogs += string(podLogs) + "/n"
 	}
 
-	// At the end, patch the owner.
+	patchHelper, err := patch.NewHelper(owner, r.Client)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to create patch helper: %w", err)
+	}
+
+	// update the owner and add the output
+	owner.Status.Output[job.Name] = compoundedLogs
+
+	// Patch the owner object.
+	if err := patchHelper.Patch(ctx, owner); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to patch event object: %w", err)
+	}
 
 	return ctrl.Result{}, nil
 }
