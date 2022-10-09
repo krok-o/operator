@@ -123,6 +123,7 @@ func (r *KrokEventReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// TODO: This is why it never reconciles this event again. So we basically need to constantly check events
 	// because we use them. Or, we create some kind of dynamic watch for each job. Which ever will be more effective.
+	// This slows down the reconcile loop...
 	return ctrl.Result{
 		RequeueAfter: 30 * time.Second,
 	}, nil
@@ -192,6 +193,9 @@ func (r *KrokEventReconciler) reconcileCreateJobs(ctx context.Context, logger lo
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      r.generateJobName(command.Name),
 				Namespace: command.Namespace,
+				Annotations: map[string]string{
+					krokAnnotationKey: krokAnnotationValue,
+				},
 			},
 			Spec: batchv1.JobSpec{
 				ActiveDeadlineSeconds: pointer.Int64(int64(r.CommandTimeout)),
@@ -280,8 +284,6 @@ func (r *KrokEventReconciler) reconcileExistingJobs(ctx context.Context, logger 
 		if job.Status.Active > 0 {
 			done = false
 		} else {
-			// look through the conditions of this job. If it has any "failed" conditions,
-			// we set the end result to failed.
 			if job.Status.Failed > 0 {
 				failed = true
 			}
@@ -321,16 +323,6 @@ func (r *KrokEventReconciler) reconcileExistingJobs(ctx context.Context, logger 
 		return done, fmt.Errorf("failed to patch event object: %w", err)
 	}
 	return done, nil
-}
-
-var eventsWhichNeedSourceCode = []string{"push", "pull_request"}
-var contains = func(list []string, item string) bool {
-	for _, i := range list {
-		if i == item {
-			return true
-		}
-	}
-	return false
 }
 
 // reconcileSource will fetch the code content based on the given repository parameters.

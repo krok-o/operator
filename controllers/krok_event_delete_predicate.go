@@ -1,9 +1,10 @@
 package controllers
 
 import (
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	"github.com/krok-o/operator/api/v1alpha1"
 )
 
 // DeletePredicate triggers an update event when a HelmRepository generation changes.
@@ -17,7 +18,7 @@ func (DeletePredicate) Update(e event.UpdateEvent) bool {
 		return false
 	}
 
-	src, ok := e.ObjectNew.(*sourcev1.HelmRepository)
+	src, ok := e.ObjectNew.(*v1alpha1.KrokEvent)
 	if !ok {
 		return false
 	}
