@@ -177,6 +177,12 @@ spec:
                               description: Outcome holds the outcome of the event
                                 such as success, failed...
                               type: string
+                            output:
+                              additionalProperties:
+                                type: string
+                              description: Output contains each job's output in a
+                                map.
+                              type: object
                           type: object
                       type: object
                     type: array
