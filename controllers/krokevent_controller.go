@@ -200,6 +200,7 @@ func (r *KrokEventReconciler) reconcileCreateJobs(ctx context.Context, logger lo
 					},
 				},
 				TTLSecondsAfterFinished: pointer.Int32(0),
+				Suspend:                 pointer.Bool(true),
 			},
 		}
 

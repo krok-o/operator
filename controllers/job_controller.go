@@ -11,9 +11,11 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/pointer"
 	"sigs.k8s.io/cluster-api/util/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -28,6 +30,7 @@ var (
 	krokAnnotationKey   = "krok.app"
 	dependenciesKey     = "jobDependencies"
 	outputKey           = "jobOutput"
+	outputFormat        = `----- BEGIN OUTPUT -----\n%s\n----- END OUTPUT -----`
 )
 
 // JobReconciler reconciles Job objects
@@ -53,6 +56,43 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 	log.V(4).Info("found job object", "job", klog.KObj(job))
 
+	resumeJob := func(ctx context.Context, job *batchv1.Job) (ctrl.Result, error) {
+		job.Spec.Suspend = pointer.Bool(false)
+		if err := r.Update(ctx, job); err != nil {
+			return ctrl.Result{
+				RequeueAfter: 10 * time.Second,
+			}, fmt.Errorf("failed to unsuspend job: %w", err)
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// If suspended...
+	if job.Spec.Suspend == nil || *job.Spec.Suspend {
+		dependingJobName, ok := job.Annotations[dependenciesKey]
+		if !ok {
+			return resumeJob(ctx, job)
+		}
+
+		dependingJob := &batchv1.Job{}
+		if err := r.Get(ctx, types.NamespacedName{
+			Name:      dependingJobName,
+			Namespace: job.Namespace,
+		}, dependingJob); err != nil {
+			log.Info("failed to find depending job, marking this job as failed")
+			// TODO: Figure out how to fail a job.
+			return ctrl.Result{}, nil
+		}
+
+		if dependingJob.Status.CompletionTime != nil {
+			return resumeJob(ctx, job)
+		}
+
+		// Fail the Job once you figure out how to.
+		return ctrl.Result{
+			RequeueAfter: 5 * time.Second,
+		}, nil
+	}
+
 	// if we are still running, leave it and check back later.
 	if job.Status.Active > 0 {
 		return ctrl.Result{
@@ -66,9 +106,6 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, fmt.Errorf("job has no owner: %w", err)
 	}
 	log.V(4).Info("found owner", "owner", klog.KObj(owner))
-
-	// TODO: If it has a dependency, requeue an leave suspended until dependent job is done. If dependent job failed
-	// make this job fail as well.
 
 	config, err := rest.InClusterConfig()
 	if err != nil {
