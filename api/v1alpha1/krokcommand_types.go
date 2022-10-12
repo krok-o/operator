@@ -22,9 +22,12 @@ import (
 
 // KrokCommandSpec defines the desired state of KrokCommand
 type KrokCommandSpec struct {
-	// Args defines an optional number of arguments to pass to this command.
-	// +optional
-	Args []string `json:"args,omitempty"`
+	// ReadInputFromSecret if defined, the command will take a list of key/value pairs in a secret
+	// and apply them as arguments to the command.
+	ReadInputFromSecret *Ref `json:"readInputFromSecret,omitempty"`
+	// CommandHasOutputToWrite if defined, it signals the underlying Job, to put its output into a generated
+	// and created secret.
+	CommandHasOutputToWrite bool `json:"commandHasOutputToWrite,omitempty"`
 	// Schedule of the command.
 	// example: 0 * * * * // follows cron job syntax.
 	// +optional

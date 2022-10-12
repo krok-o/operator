@@ -36,9 +36,6 @@ type KrokEventStatus struct {
 	// Outcome holds the outcome of the event such as success, failed...
 	// +optional
 	Outcome string `json:"outcome,omitempty"`
-	// Output contains each job's output in a map.
-	// +optional
-	Output map[string]string `json:"output,omitempty"`
 	// Jobs contains current running jobs for this event.
 	// +optional
 	Jobs []Ref `json:"jobs,omitempty"`

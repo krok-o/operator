@@ -172,6 +172,11 @@ func (r *KrokEventReconciler) reconcileCreateJobs(ctx context.Context, logger lo
 			fmt.Sprintf("--payload=%s", event.Spec.Payload),
 			fmt.Sprintf("--artifact-url=%s", url),
 		}
+		var err error
+		args, err = r.readInputFromSecretIfDefined(ctx, args, command)
+		if err != nil {
+			return fmt.Errorf("failed to add user defined arguments: %w", err)
+		}
 
 		job := &batchv1.Job{
 			TypeMeta: metav1.TypeMeta{
@@ -183,6 +188,7 @@ func (r *KrokEventReconciler) reconcileCreateJobs(ctx context.Context, logger lo
 				Namespace: command.Namespace,
 				Annotations: map[string]string{
 					krokAnnotationKey: krokAnnotationValue,
+					ownerCommandName:  command.Name,
 				},
 			},
 			Spec: batchv1.JobSpec{
@@ -239,6 +245,24 @@ func (r *KrokEventReconciler) reconcileCreateJobs(ctx context.Context, logger lo
 	}
 
 	return nil
+}
+
+func (r *KrokEventReconciler) readInputFromSecretIfDefined(ctx context.Context, args []string, command *v1alpha1.KrokCommand) ([]string, error) {
+	if command.Spec.ReadInputFromSecret == nil {
+		return args, nil
+	}
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{
+		Namespace: command.Spec.ReadInputFromSecret.Namespace,
+		Name:      command.Spec.ReadInputFromSecret.Name,
+	}, secret); err != nil {
+		return nil, fmt.Errorf("failed to get secret which was requested: %w", err)
+	}
+	for k, v := range secret.Data {
+		args = append(args, fmt.Sprintf("%s=%s", k, v))
+	}
+
+	return args, nil
 }
 
 // reconcileSource will fetch the code content based on the given repository parameters.

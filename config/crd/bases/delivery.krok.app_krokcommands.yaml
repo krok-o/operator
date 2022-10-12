@@ -35,12 +35,10 @@ spec:
           spec:
             description: KrokCommandSpec defines the desired state of KrokCommand
             properties:
-              args:
-                description: Args defines an optional number of arguments to pass
-                  to this command.
-                items:
-                  type: string
-                type: array
+              commandHasOutputToWrite:
+                description: CommandHasOutputToWrite if defined, it signals the underlying
+                  Job, to put its output into a generated and created secret.
+                type: boolean
               enabled:
                 description: Enabled defines if this command can be executed or not.
                 type: boolean
@@ -54,6 +52,19 @@ spec:
                 items:
                   type: string
                 type: array
+              readInputFromSecret:
+                description: ReadInputFromSecret if defined, the command will take
+                  a list of key/value pairs in a secret and apply them as arguments
+                  to the command.
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                required:
+                - name
+                - namespace
+                type: object
               schedule:
                 description: 'Schedule of the command. example: 0 * * * * // follows
                   cron job syntax.'

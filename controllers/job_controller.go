@@ -28,9 +28,10 @@ import (
 var (
 	krokAnnotationValue = "krokjob"
 	krokAnnotationKey   = "krok.app"
+	ownerCommandName    = "command.name"
 	dependenciesKey     = "jobDependencies"
-	outputKey           = "jobOutput"
-	outputFormat        = `----- BEGIN OUTPUT -----\n%s\n----- END OUTPUT -----`
+	//outputKey           = "jobOutput"
+	//outputFormat        = `----- BEGIN OUTPUT -----\n%s\n----- END OUTPUT -----`
 )
 
 // JobReconciler reconciles Job objects
@@ -100,33 +101,81 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}, nil
 	}
 
-	// if we are no longer running, update the owner event with output from the job.
+	// we are no longer running
+	// - if there is a secret defined for output, put the output in there
+	// - update the parent event and set its status to DONE
 	owner := &v1alpha1.KrokEvent{}
 	if err := GetParentObject(ctx, r.Client, "KrokEvent", v1alpha1.GroupVersion.Group, job, owner); err != nil {
 		return ctrl.Result{}, fmt.Errorf("job has no owner: %w", err)
 	}
 	log.V(4).Info("found owner", "owner", klog.KObj(owner))
 
-	config, err := rest.InClusterConfig()
-	if err != nil {
+	commandName, ok := job.Annotations[ownerCommandName]
+	if !ok {
 		return ctrl.Result{
 			RequeueAfter: 30 * time.Second,
-		}, fmt.Errorf("failed to get in cluster config: %w", err)
+		}, fmt.Errorf("job doesn't have an owning command")
+	}
+	command := &v1alpha1.KrokCommand{}
+	if err := r.Get(ctx, types.NamespacedName{
+		Name:      commandName,
+		Namespace: job.Namespace,
+	}, command); err != nil {
+		return ctrl.Result{
+			RequeueAfter: 30 * time.Second,
+		}, fmt.Errorf("failed to find command: %w", err)
+	}
+
+	if command.Spec.CommandHasOutputToWrite {
+		if err := r.outputIntoSecret(ctx, job); err != nil {
+			return ctrl.Result{
+				RequeueAfter: 30 * time.Second,
+			}, fmt.Errorf("failed to generate secret output: %w", err)
+		}
+	}
+
+	patchHelper, err := patch.NewHelper(owner, r.Client)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to create patch helper: %w", err)
+	}
+
+	// update the owner and add the output
+	owner.Status.Done = true
+
+	// Patch the owner object.
+	if err := patchHelper.Patch(ctx, owner); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to patch event object: %w", err)
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *JobReconciler) outputIntoSecret(ctx context.Context, job *batchv1.Job) error {
+	secret := &corev1.Secret{
+		TypeMeta: v1.TypeMeta{
+			Kind:       "Secret",
+			APIVersion: corev1.GroupName,
+		},
+		ObjectMeta: v1.ObjectMeta{
+			Name:      r.generateJobSecretName(job),
+			Namespace: job.Namespace,
+		},
+		Type: "opaque",
+	}
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return fmt.Errorf("failed to get in cluster config: %w", err)
 	}
 	// creates the clientset
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		return ctrl.Result{
-			RequeueAfter: 30 * time.Second,
-		}, fmt.Errorf("failed to create clientset: %w", err)
+		return fmt.Errorf("failed to create clientset: %w", err)
 	}
 	// job-name=slack-command-job-1665307554
 	pods, err := clientset.CoreV1().Pods(job.Namespace).List(ctx,
 		v1.ListOptions{LabelSelector: fmt.Sprintf("job-name=%s", job.Name)})
 	if err != nil {
-		return ctrl.Result{
-			RequeueAfter: 30 * time.Second,
-		}, fmt.Errorf("failed to list pods: %w", err)
+		return fmt.Errorf("failed to list pods: %w", err)
 	}
 
 	getLogs := func(pod *corev1.Pod) ([]byte, error) {
@@ -146,25 +195,17 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	for _, pod := range pods.Items {
 		podLogs, err := getLogs(&pod)
 		if err != nil {
-			return ctrl.Result{}, err
+			return fmt.Errorf("failed to get pod logs: %w", err)
 		}
 		compoundedLogs += string(podLogs) + "/n"
 	}
-
-	patchHelper, err := patch.NewHelper(owner, r.Client)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to create patch helper: %w", err)
+	secret.Data = map[string][]byte{
+		"output": []byte(compoundedLogs),
 	}
-
-	// update the owner and add the output
-	owner.Status.Output[job.Name] = compoundedLogs
-
-	// Patch the owner object.
-	if err := patchHelper.Patch(ctx, owner); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to patch event object: %w", err)
+	if err := r.Create(ctx, secret); err != nil {
+		return fmt.Errorf("failed to create output secret: %w", err)
 	}
-
-	return ctrl.Result{}, nil
+	return nil
 }
 
 func (r *JobReconciler) OwnedByKrok(job *batchv1.Job) bool {
@@ -178,4 +219,8 @@ func (r *JobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&batchv1.Job{}).
 		WithEventFilter(predicate.Or(JobUpdatePredicate{}, JobDeletePredicate{})).
 		Complete(r)
+}
+
+func (r *JobReconciler) generateJobSecretName(job *batchv1.Job) string {
+	return fmt.Sprintf("%s-secret", job.Name)
 }
