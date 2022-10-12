@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -31,7 +32,8 @@ var (
 	ownerCommandName    = "command.name"
 	dependenciesKey     = "jobDependencies"
 	//outputKey           = "jobOutput"
-	//outputFormat        = `----- BEGIN OUTPUT -----\n%s\n----- END OUTPUT -----`
+	beginOutputFormat = "----- BEGIN OUTPUT -----"
+	endOutputFormat   = "----- END OUTPUT -----"
 )
 
 // JobReconciler reconciles Job objects
@@ -85,6 +87,47 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}
 
 		if dependingJob.Status.CompletionTime != nil {
+			// TODO: Get if there is any output and update the job with passing those along to the command.
+			secretName := r.generateJobSecretName(job)
+			secret := &corev1.Secret{}
+			if err := r.Get(ctx, types.NamespacedName{
+				Name:      secretName,
+				Namespace: job.Namespace,
+			}, secret); err != nil {
+				if apierrors.IsNotFound(err) {
+					return resumeJob(ctx, job)
+				}
+				return ctrl.Result{}, fmt.Errorf("failed to get secret: %w", err)
+			}
+			data, ok := secret.Data["output"]
+			if !ok {
+				return ctrl.Result{}, fmt.Errorf("secret didn't contain 'output'")
+			}
+			s := string(data)
+			beginIndex := strings.Index(s, beginOutputFormat)
+			if beginIndex == -1 {
+				log.Info("secret didn't contain any values to process", "secret", klog.KObj(secret))
+				return ctrl.Result{}, nil
+			}
+			endIndex := strings.Index(s, endOutputFormat)
+			between := s[beginIndex+len(beginOutputFormat)+1 : endIndex]
+			split := strings.Split(between, "\n")
+			for _, part := range split {
+				// I'm creating the job, so I know there is only a single container specification.
+				if len(job.Spec.Template.Spec.Containers) == 0 {
+					return ctrl.Result{
+						RequeueAfter: 30 * time.Second,
+					}, fmt.Errorf("container specification for job is empty")
+				}
+				container := job.Spec.Template.Spec.Containers[0]
+				container.Args = append(container.Args, fmt.Sprintf("--%s", part))
+			}
+			if err := r.Update(ctx, job); err != nil {
+				return ctrl.Result{
+					RequeueAfter: 30 * time.Second,
+				}, fmt.Errorf("failed to update job to add output: %w", err)
+			}
+
 			return resumeJob(ctx, job)
 		}
 
