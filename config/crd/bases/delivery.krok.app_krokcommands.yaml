@@ -39,6 +39,12 @@ spec:
                 description: CommandHasOutputToWrite if defined, it signals the underlying
                   Job, to put its output into a generated and created secret.
                 type: boolean
+              dependencies:
+                description: Dependencies defines a list of command names that this
+                  command depends on.
+                items:
+                  type: string
+                type: array
               enabled:
                 description: Enabled defines if this command can be executed or not.
                 type: boolean

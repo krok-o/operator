@@ -56,8 +56,6 @@ spec:
                       type: string
                     namespace:
                       type: string
-                    parallel:
-                      type: boolean
                   required:
                   - name
                   - namespace

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -60,6 +61,15 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	log.V(4).Info("found job object", "job", klog.KObj(job))
 
 	resumeJob := func(ctx context.Context, job *batchv1.Job) (ctrl.Result, error) {
+		// Need to re-get the job, because it was potentially updated
+		// when it was looking for an output and adds the arguments.
+		if err := r.Get(ctx, types.NamespacedName{
+			Name:      job.Name,
+			Namespace: job.Namespace,
+		}, job); err != nil {
+			log.Info("failed to get depending job, marking this job as failed")
+			return ctrl.Result{}, nil
+		}
 		job.Spec.Suspend = pointer.Bool(false)
 		if err := r.Update(ctx, job); err != nil {
 			return ctrl.Result{
@@ -71,67 +81,35 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	// If suspended...
 	if job.Spec.Suspend == nil || *job.Spec.Suspend {
-		dependingJobName, ok := job.Annotations[dependenciesKey]
+		dependingJobNames, ok := job.Annotations[dependenciesKey]
 		if !ok {
 			return resumeJob(ctx, job)
 		}
-
-		dependingJob := &batchv1.Job{}
-		if err := r.Get(ctx, types.NamespacedName{
-			Name:      dependingJobName,
-			Namespace: job.Namespace,
-		}, dependingJob); err != nil {
-			log.Info("failed to find depending job, marking this job as failed")
-			// TODO: Figure out how to fail a job.
-			return ctrl.Result{}, nil
-		}
-
-		if dependingJob.Status.CompletionTime != nil {
-			// TODO: Get if there is any output and update the job with passing those along to the command.
-			secretName := r.generateJobSecretName(job)
-			secret := &corev1.Secret{}
+		split := strings.Split(dependingJobNames, ",")
+		resume := true
+		for _, dependingJobName := range split {
+			dependingJob := &batchv1.Job{}
 			if err := r.Get(ctx, types.NamespacedName{
-				Name:      secretName,
+				Name:      dependingJobName,
 				Namespace: job.Namespace,
-			}, secret); err != nil {
-				if apierrors.IsNotFound(err) {
-					return resumeJob(ctx, job)
-				}
-				return ctrl.Result{}, fmt.Errorf("failed to get secret: %w", err)
-			}
-			data, ok := secret.Data["output"]
-			if !ok {
-				return ctrl.Result{}, fmt.Errorf("secret didn't contain 'output'")
-			}
-			s := string(data)
-			beginIndex := strings.Index(s, beginOutputFormat)
-			if beginIndex == -1 {
-				log.Info("secret didn't contain any values to process", "secret", klog.KObj(secret))
+			}, dependingJob); err != nil {
+				log.Info("failed to find depending job, marking this job as failed")
+				// TODO: Figure out how to fail a job.
 				return ctrl.Result{}, nil
 			}
-			endIndex := strings.Index(s, endOutputFormat)
-			between := s[beginIndex+len(beginOutputFormat)+1 : endIndex]
-			split := strings.Split(between, "\n")
-			for _, part := range split {
-				// I'm creating the job, so I know there is only a single container specification.
-				if len(job.Spec.Template.Spec.Containers) == 0 {
-					return ctrl.Result{
-						RequeueAfter: 30 * time.Second,
-					}, fmt.Errorf("container specification for job is empty")
-				}
-				container := job.Spec.Template.Spec.Containers[0]
-				container.Args = append(container.Args, fmt.Sprintf("--%s", part))
+			if dependingJob.Status.CompletionTime == nil {
+				resume = false
+				continue
 			}
-			if err := r.Update(ctx, job); err != nil {
-				return ctrl.Result{
-					RequeueAfter: 30 * time.Second,
-				}, fmt.Errorf("failed to update job to add output: %w", err)
+			if err := r.updateJobWithOutput(ctx, log, job); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to get job output: %w", err)
 			}
-
+		}
+		if resume {
 			return resumeJob(ctx, job)
 		}
 
-		// Fail the Job once you figure out how to.
+		// TODO: Fail the Job once you figure out how to.
 		return ctrl.Result{
 			RequeueAfter: 5 * time.Second,
 		}, nil
@@ -266,4 +244,44 @@ func (r *JobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *JobReconciler) generateJobSecretName(job *batchv1.Job) string {
 	return fmt.Sprintf("%s-secret", job.Name)
+}
+
+func (r *JobReconciler) updateJobWithOutput(ctx context.Context, log logr.Logger, job *batchv1.Job) error {
+	secretName := r.generateJobSecretName(job)
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{
+		Name:      secretName,
+		Namespace: job.Namespace,
+	}, secret); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to get secret: %w", err)
+	}
+	// If the secret is found, get the output out of it and provide it.
+	data, ok := secret.Data["output"]
+	if !ok {
+		return fmt.Errorf("secret didn't contain 'output'")
+	}
+	s := string(data)
+	beginIndex := strings.Index(s, beginOutputFormat)
+	if beginIndex == -1 {
+		log.Info("secret didn't contain any values to process", "secret", klog.KObj(secret))
+		return nil
+	}
+	endIndex := strings.Index(s, endOutputFormat)
+	between := s[beginIndex+len(beginOutputFormat)+1 : endIndex]
+	split := strings.Split(between, "\n")
+	for _, part := range split {
+		// I'm creating the job, so I know there is only a single container specification.
+		if len(job.Spec.Template.Spec.Containers) == 0 {
+			return fmt.Errorf("container specification for job is empty")
+		}
+		container := job.Spec.Template.Spec.Containers[0]
+		container.Args = append(container.Args, fmt.Sprintf("--%s", part))
+	}
+	if err := r.Update(ctx, job); err != nil {
+		return fmt.Errorf("failed to update job to add output: %w", err)
+	}
+	return nil
 }

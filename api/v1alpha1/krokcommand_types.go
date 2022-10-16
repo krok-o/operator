@@ -41,6 +41,8 @@ type KrokCommandSpec struct {
 	// Platforms holds all the platforms which this command supports.
 	// +optional
 	Platforms []string `json:"platforms,omitempty"`
+	// Dependencies defines a list of command names that this command depends on.
+	Dependencies []string `json:"dependencies,omitempty"`
 }
 
 // KrokCommandStatus defines the observed state of KrokCommand

@@ -34,8 +34,6 @@ type Ref struct {
 
 type CommandRef struct {
 	Ref `json:",inline"`
-	// +optional
-	Parallel bool `json:"parallel,omitempty"`
 }
 
 // KrokRepositorySpec defines the desired state of KrokRepository

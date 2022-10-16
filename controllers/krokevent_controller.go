@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -210,6 +211,10 @@ func (r *KrokEventReconciler) reconcileCreateJobs(ctx context.Context, logger lo
 			},
 		}
 
+		// Add all dependencies as a list of command names.
+		if len(command.Spec.Dependencies) > 0 {
+			job.ObjectMeta.Annotations[dependenciesKey] = strings.Join(command.Spec.Dependencies, ",")
+		}
 		// Set external object ControllerReference to the provider ref.
 		if err := controllerutil.SetControllerReference(event, job, r.Client.Scheme()); err != nil {
 			return fmt.Errorf("failed to set owner reference: %w", err)
