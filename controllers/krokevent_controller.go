@@ -43,7 +43,10 @@ import (
 	source_controller "github.com/krok-o/operator/pkg/source-controller"
 )
 
-var jobFinalizer = "event.krok.app/finalizer"
+var (
+	finalizer                 = "event.krok.app/finalizer"
+	outputSecretAnnotationKey = "output-to-secret"
+)
 
 // KrokEventReconciler reconciles a KrokEvent object
 type KrokEventReconciler struct {
@@ -58,7 +61,12 @@ type KrokEventReconciler struct {
 //+kubebuilder:rbac:groups=delivery.krok.app,resources=krokevents,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=delivery.krok.app,resources=krokevents/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=delivery.krok.app,resources=krokevents/finalizers,verbs=update
-//+kubebuilder:rbac:groups=delivery.krok.app,resources=jobs/finalizers,verbs=update
+//+kubebuilder:rbac:groups=delivery.krok.app,resources=krokcommands,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=batch,resources=jobs/finalizers,verbs=update
+//+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="",resources=pods/log,verbs=get
+//+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -195,6 +203,12 @@ func (r *KrokEventReconciler) reconcileCreateJobs(ctx context.Context, logger lo
 			Spec: batchv1.JobSpec{
 				ActiveDeadlineSeconds: pointer.Int64(int64(r.CommandTimeout)),
 				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							outputSecretAnnotationKey: fmt.Sprintf("%t", command.Spec.CommandHasOutputToWrite),
+							krokAnnotationKey:         krokAnnotationValue,
+						},
+					},
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{
@@ -206,9 +220,13 @@ func (r *KrokEventReconciler) reconcileCreateJobs(ctx context.Context, logger lo
 						RestartPolicy: "Never",
 					},
 				},
-				TTLSecondsAfterFinished: pointer.Int32(0),
+				TTLSecondsAfterFinished: pointer.Int32(120),
 				Suspend:                 pointer.Bool(true),
 			},
+		}
+		// Only add the finalizer in case we need the output.
+		if command.Spec.CommandHasOutputToWrite {
+			job.Spec.Template.Finalizers = []string{finalizer}
 		}
 
 		// Add all dependencies as a list of command names.
@@ -221,7 +239,7 @@ func (r *KrokEventReconciler) reconcileCreateJobs(ctx context.Context, logger lo
 		}
 
 		// Since this is a brand-new object, we can be sure that it will be an update.
-		controllerutil.AddFinalizer(job, jobFinalizer)
+		controllerutil.AddFinalizer(job, finalizer)
 
 		if err := r.Create(ctx, job); err != nil {
 			return fmt.Errorf("failed to create job: %w", err)
@@ -309,13 +327,28 @@ func (r *KrokEventReconciler) reconcileDelete(ctx context.Context, event *v1alph
 		}
 
 		// Remove our finalizer from the list and update it
-		controllerutil.RemoveFinalizer(job, jobFinalizer)
+		controllerutil.RemoveFinalizer(job, finalizer)
 		if err := r.Client.Update(ctx, job); err != nil {
 			log.Error(err, "failed to remove job")
 			return ctrl.Result{
 				RequeueAfter: 20 * time.Second,
 			}, fmt.Errorf("failed to update job: %w", err)
 		}
+
+		// Re-get so we deal with the latest revision. Also, once the finalizer has been removed
+		// it might be possible that the job is deleted by the time we are trying to delete it.
+		if err := r.Client.Get(ctx, types.NamespacedName{
+			Namespace: event.Status.Jobs[i].Namespace,
+			Name:      event.Status.Jobs[i].Name,
+		}, job); err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
+			return ctrl.Result{
+				RequeueAfter: 20 * time.Second,
+			}, fmt.Errorf("failed to get job for other reason than it's not found: %w", err)
+		}
+
 		background := metav1.DeletePropagationBackground
 		if err := r.Client.Delete(ctx, job, &client.DeleteOptions{
 			PropagationPolicy: &background,
@@ -328,8 +361,7 @@ func (r *KrokEventReconciler) reconcileDelete(ctx context.Context, event *v1alph
 	}
 
 	// Remove our finalizer from the list and update it
-	// propagationPolicy=
-	controllerutil.RemoveFinalizer(event, jobFinalizer)
+	controllerutil.RemoveFinalizer(event, finalizer)
 
 	if err := r.Update(ctx, event); err != nil {
 		log.Error(err, "failed to update event to remove the finalizer")

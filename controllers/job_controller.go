@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 	"time"
 
@@ -11,11 +10,8 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/cluster-api/util/patch"
@@ -28,10 +24,10 @@ import (
 )
 
 var (
-	krokAnnotationValue = "krokjob"
-	krokAnnotationKey   = "krok.app"
-	ownerCommandName    = "command.name"
-	dependenciesKey     = "jobDependencies"
+	krokAnnotationValue = "krok-job"
+	krokAnnotationKey   = "krok-app"
+	ownerCommandName    = "command-name"
+	dependenciesKey     = "job-dependencies"
 	//outputKey           = "jobOutput"
 	beginOutputFormat = "----- BEGIN OUTPUT -----"
 	endOutputFormat   = "----- END OUTPUT -----"
@@ -54,11 +50,16 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 		return ctrl.Result{}, fmt.Errorf("failed to get job object: %w", err)
 	}
-	if !r.OwnedByKrok(job) {
+	if !OwnedByKrok(job.Annotations) {
 		// We won't reconcile every job, just jobs which were launched by Krok.
 		return ctrl.Result{}, nil
 	}
-	log.V(4).Info("found job object", "job", klog.KObj(job))
+	log = log.WithValues("job", klog.KObj(job))
+	log.V(4).Info("found job object")
+	if job.DeletionTimestamp != nil {
+		log.Info("job is being deleted, stop reconciling it.")
+		return ctrl.Result{}, nil
+	}
 
 	resumeJob := func(ctx context.Context, job *batchv1.Job) (ctrl.Result, error) {
 		// Need to re-get the job, because it was potentially updated
@@ -80,7 +81,7 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	// If suspended...
-	if job.Spec.Suspend == nil || *job.Spec.Suspend {
+	if job.Spec.Suspend != nil && *job.Spec.Suspend {
 		dependingJobNames, ok := job.Annotations[dependenciesKey]
 		if !ok {
 			return resumeJob(ctx, job)
@@ -147,14 +148,6 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}, fmt.Errorf("failed to find command: %w", err)
 	}
 
-	if command.Spec.CommandHasOutputToWrite {
-		if err := r.outputIntoSecret(ctx, job); err != nil {
-			return ctrl.Result{
-				RequeueAfter: 30 * time.Second,
-			}, fmt.Errorf("failed to generate secret output: %w", err)
-		}
-	}
-
 	patchHelper, err := patch.NewHelper(owner, r.Client)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create patch helper: %w", err)
@@ -169,69 +162,6 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	return ctrl.Result{}, nil
-}
-
-func (r *JobReconciler) outputIntoSecret(ctx context.Context, job *batchv1.Job) error {
-	secret := &corev1.Secret{
-		TypeMeta: v1.TypeMeta{
-			Kind:       "Secret",
-			APIVersion: corev1.GroupName,
-		},
-		ObjectMeta: v1.ObjectMeta{
-			Name:      r.generateJobSecretName(job),
-			Namespace: job.Namespace,
-		},
-		Type: "opaque",
-	}
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		return fmt.Errorf("failed to get in cluster config: %w", err)
-	}
-	// creates the clientset
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return fmt.Errorf("failed to create clientset: %w", err)
-	}
-	// job-name=slack-command-job-1665307554
-	pods, err := clientset.CoreV1().Pods(job.Namespace).List(ctx,
-		v1.ListOptions{LabelSelector: fmt.Sprintf("job-name=%s", job.Name)})
-	if err != nil {
-		return fmt.Errorf("failed to list pods: %w", err)
-	}
-
-	getLogs := func(pod *corev1.Pod) ([]byte, error) {
-		podReq := clientset.CoreV1().Pods(job.Namespace).GetLogs(pod.Name, &corev1.PodLogOptions{})
-		podLogs, err := podReq.Stream(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get logs for job pod '%s': %w", pod.Name, err)
-		}
-		defer podLogs.Close()
-		content, err := io.ReadAll(podLogs)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read logs '%s': %w", pod.Name, err)
-		}
-		return content, nil
-	}
-	var compoundedLogs string
-	for _, pod := range pods.Items {
-		podLogs, err := getLogs(&pod)
-		if err != nil {
-			return fmt.Errorf("failed to get pod logs: %w", err)
-		}
-		compoundedLogs += string(podLogs) + "/n"
-	}
-	secret.Data = map[string][]byte{
-		"output": []byte(compoundedLogs),
-	}
-	if err := r.Create(ctx, secret); err != nil {
-		return fmt.Errorf("failed to create output secret: %w", err)
-	}
-	return nil
-}
-
-func (r *JobReconciler) OwnedByKrok(job *batchv1.Job) bool {
-	_, ok := job.Annotations[krokAnnotationKey]
-	return ok
 }
 
 // SetupWithManager sets up the controller with the Manager.
