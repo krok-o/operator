@@ -282,7 +282,7 @@ func (r *KrokEventReconciler) readInputFromSecretIfDefined(ctx context.Context, 
 		return nil, fmt.Errorf("failed to get secret which was requested: %w", err)
 	}
 	for k, v := range secret.Data {
-		args = append(args, fmt.Sprintf("%s=%s", k, v))
+		args = append(args, fmt.Sprintf("--%s=%s", k, v))
 	}
 
 	return args, nil
