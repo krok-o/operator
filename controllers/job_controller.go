@@ -61,21 +61,41 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, nil
 	}
 
+	owner := &v1alpha1.KrokEvent{}
+	if err := GetParentObject(ctx, r.Client, "KrokEvent", v1alpha1.GroupVersion.Group, job, owner); err != nil {
+		return ctrl.Result{}, fmt.Errorf("job has no owner: %w", err)
+	}
+	log.V(4).Info("found owner", "owner", klog.KObj(owner))
+
 	resumeJob := func(ctx context.Context, job *batchv1.Job) (ctrl.Result, error) {
-		// Need to re-get the job, because it was potentially updated
-		// when it was looking for an output and adds the arguments.
-		if err := r.Get(ctx, types.NamespacedName{
-			Name:      job.Name,
-			Namespace: job.Namespace,
-		}, job); err != nil {
-			log.Info("failed to get depending job, marking this job as failed")
-			return ctrl.Result{}, nil
-		}
-		job.Spec.Suspend = pointer.Bool(false)
-		if err := r.Update(ctx, job); err != nil {
+		patchHelper, err := patch.NewHelper(job, r.Client)
+		if err != nil {
 			return ctrl.Result{
 				RequeueAfter: 10 * time.Second,
-			}, fmt.Errorf("failed to unsuspend job: %w", err)
+			}, fmt.Errorf("failed to create patch helper: %w", err)
+		}
+		job.Spec.Suspend = pointer.Bool(false)
+		if err := patchHelper.Patch(ctx, job); err != nil {
+			return ctrl.Result{
+				RequeueAfter: 10 * time.Second,
+			}, fmt.Errorf("failed to patch object: %w", err)
+		}
+		return ctrl.Result{}, nil
+	}
+
+	failOwnerEvent := func(ctx context.Context, event *v1alpha1.KrokEvent) (ctrl.Result, error) {
+		patchHelper, err := patch.NewHelper(event, r.Client)
+		if err != nil {
+			return ctrl.Result{
+				RequeueAfter: 10 * time.Second,
+			}, fmt.Errorf("failed to create patch helper: %w", err)
+		}
+		event.Status.Done = true
+		event.Status.Outcome = "Failed"
+		if err := patchHelper.Patch(ctx, event); err != nil {
+			return ctrl.Result{
+				RequeueAfter: 10 * time.Second,
+			}, fmt.Errorf("failed to patch object: %w", err)
 		}
 		return ctrl.Result{}, nil
 	}
@@ -94,9 +114,11 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 				Name:      dependingJobName,
 				Namespace: job.Namespace,
 			}, dependingJob); err != nil {
-				log.Info("failed to find depending job, marking this job as failed")
+				log.Error(err, "failed to find depending job, marking this job as failed")
 				// TODO: Figure out how to fail a job.
-				return ctrl.Result{}, nil
+				// Alternatively, just ignore the job for now. It will be deleted later.
+				// And possibly, mark the owner event failed?
+				return failOwnerEvent(ctx, owner)
 			}
 			if dependingJob.Status.CompletionTime == nil {
 				resume = false
@@ -110,10 +132,8 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 			return resumeJob(ctx, job)
 		}
 
-		// TODO: Fail the Job once you figure out how to.
-		return ctrl.Result{
-			RequeueAfter: 5 * time.Second,
-		}, nil
+		// We just fail the owner event, so we don't reconcile failed jobs any longer.
+		return failOwnerEvent(ctx, owner)
 	}
 
 	// if we are still running, leave it and check back later.
@@ -124,37 +144,15 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	// we are no longer running
-	// - if there is a secret defined for output, put the output in there
 	// - update the parent event and set its status to DONE
-	owner := &v1alpha1.KrokEvent{}
-	if err := GetParentObject(ctx, r.Client, "KrokEvent", v1alpha1.GroupVersion.Group, job, owner); err != nil {
-		return ctrl.Result{}, fmt.Errorf("job has no owner: %w", err)
-	}
-	log.V(4).Info("found owner", "owner", klog.KObj(owner))
-
-	commandName, ok := job.Annotations[ownerCommandName]
-	if !ok {
-		return ctrl.Result{
-			RequeueAfter: 30 * time.Second,
-		}, fmt.Errorf("job doesn't have an owning command")
-	}
-	command := &v1alpha1.KrokCommand{}
-	if err := r.Get(ctx, types.NamespacedName{
-		Name:      commandName,
-		Namespace: job.Namespace,
-	}, command); err != nil {
-		return ctrl.Result{
-			RequeueAfter: 30 * time.Second,
-		}, fmt.Errorf("failed to find command: %w", err)
-	}
-
 	patchHelper, err := patch.NewHelper(owner, r.Client)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create patch helper: %w", err)
 	}
 
-	// update the owner and add the output
+	// update the owner and add the outcome.
 	owner.Status.Done = true
+	owner.Status.Outcome = "Success"
 
 	// Patch the owner object.
 	if err := patchHelper.Patch(ctx, owner); err != nil {
@@ -188,6 +186,7 @@ func (r *JobReconciler) updateJobWithOutput(ctx context.Context, log logr.Logger
 		}
 		return fmt.Errorf("failed to get secret: %w", err)
 	}
+
 	// If the secret is found, get the output out of it and provide it.
 	data, ok := secret.Data["output"]
 	if !ok {
@@ -199,6 +198,12 @@ func (r *JobReconciler) updateJobWithOutput(ctx context.Context, log logr.Logger
 		log.Info("secret didn't contain any values to process", "secret", klog.KObj(secret))
 		return nil
 	}
+
+	patchHelper, err := patch.NewHelper(job, r.Client)
+	if err != nil {
+		return fmt.Errorf("failed to create patch helper: %w", err)
+	}
+
 	endIndex := strings.Index(s, endOutputFormat)
 	between := s[beginIndex+len(beginOutputFormat)+1 : endIndex]
 	split := strings.Split(between, "\n")
@@ -207,11 +212,11 @@ func (r *JobReconciler) updateJobWithOutput(ctx context.Context, log logr.Logger
 		if len(job.Spec.Template.Spec.Containers) == 0 {
 			return fmt.Errorf("container specification for job is empty")
 		}
-		container := job.Spec.Template.Spec.Containers[0]
-		container.Args = append(container.Args, fmt.Sprintf("--%s", part))
+		job.Spec.Template.Spec.Containers[0].Args = append(job.Spec.Template.Spec.Containers[0].Args, fmt.Sprintf("--%s", part))
 	}
-	if err := r.Update(ctx, job); err != nil {
-		return fmt.Errorf("failed to update job to add output: %w", err)
+
+	if err := patchHelper.Patch(ctx, job); err != nil {
+		return fmt.Errorf("failed to patch object: %w", err)
 	}
 	return nil
 }
