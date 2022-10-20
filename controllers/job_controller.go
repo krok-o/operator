@@ -134,8 +134,10 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 			return resumeJob(ctx, job)
 		}
 
-		// We just fail the owner event, so we don't reconcile failed jobs any longer.
-		return failOwnerEvent(ctx, owner)
+		// re-queue as the depending on jobs aren't done yet.
+		return ctrl.Result{
+			RequeueAfter: 30 * time.Second,
+		}, nil
 	}
 
 	// if we are still running, leave it and check back later.
@@ -146,6 +148,8 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	// update the owner and add the outcome.
+	// TODO: This can only happen if ALL the jobs for the event are done. I need to loop through all of the jobs
+	// for an event and check their statuses.
 	newOwner := owner.DeepCopy()
 	newOwner.Status.Done = true
 	newOwner.Status.Outcome = "Success"
