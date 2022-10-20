@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/cluster-api/util/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -57,7 +58,14 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	log = log.WithValues("job", klog.KObj(job))
 	log.V(4).Info("found job object")
 	if job.DeletionTimestamp != nil {
-		log.Info("job is being deleted, stop reconciling it.")
+		log.Info("job is being deleted, remove the finalizer.")
+		newJob := job.DeepCopy()
+		controllerutil.RemoveFinalizer(newJob, finalizer)
+		if err := r.patchObject(ctx, job, newJob); err != nil {
+			return ctrl.Result{
+				RequeueAfter: 10 * time.Second,
+			}, fmt.Errorf("failed to patch object: %w", err)
+		}
 		return ctrl.Result{}, nil
 	}
 
@@ -68,14 +76,9 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	log.V(4).Info("found owner", "owner", klog.KObj(owner))
 
 	resumeJob := func(ctx context.Context, job *batchv1.Job) (ctrl.Result, error) {
-		patchHelper, err := patch.NewHelper(job, r.Client)
-		if err != nil {
-			return ctrl.Result{
-				RequeueAfter: 10 * time.Second,
-			}, fmt.Errorf("failed to create patch helper: %w", err)
-		}
-		job.Spec.Suspend = pointer.Bool(false)
-		if err := patchHelper.Patch(ctx, job); err != nil {
+		newJob := job.DeepCopy()
+		newJob.Spec.Suspend = pointer.Bool(false)
+		if err := r.patchObject(ctx, job, newJob); err != nil {
 			return ctrl.Result{
 				RequeueAfter: 10 * time.Second,
 			}, fmt.Errorf("failed to patch object: %w", err)
@@ -84,15 +87,10 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	failOwnerEvent := func(ctx context.Context, event *v1alpha1.KrokEvent) (ctrl.Result, error) {
-		patchHelper, err := patch.NewHelper(event, r.Client)
-		if err != nil {
-			return ctrl.Result{
-				RequeueAfter: 10 * time.Second,
-			}, fmt.Errorf("failed to create patch helper: %w", err)
-		}
+		newEvent := event.DeepCopy()
 		event.Status.Done = true
 		event.Status.Outcome = "Failed"
-		if err := patchHelper.Patch(ctx, event); err != nil {
+		if err := r.patchObject(ctx, event, newEvent); err != nil {
 			return ctrl.Result{
 				RequeueAfter: 10 * time.Second,
 			}, fmt.Errorf("failed to patch object: %w", err)
@@ -114,6 +112,10 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 				Name:      dependingJobName,
 				Namespace: job.Namespace,
 			}, dependingJob); err != nil {
+				if apierrors.IsNotFound(err) {
+					// Give it a bit of time to find the dependent job.
+					return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+				}
 				log.Error(err, "failed to find depending job, marking this job as failed")
 				// TODO: Figure out how to fail a job.
 				// Alternatively, just ignore the job for now. It will be deleted later.
@@ -143,20 +145,16 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}, nil
 	}
 
-	// we are no longer running
-	// - update the parent event and set its status to DONE
-	patchHelper, err := patch.NewHelper(owner, r.Client)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to create patch helper: %w", err)
-	}
-
 	// update the owner and add the outcome.
-	owner.Status.Done = true
-	owner.Status.Outcome = "Success"
+	newOwner := owner.DeepCopy()
+	newOwner.Status.Done = true
+	newOwner.Status.Outcome = "Success"
 
 	// Patch the owner object.
-	if err := patchHelper.Patch(ctx, owner); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to patch event object: %w", err)
+	if err := r.patchObject(ctx, owner, newOwner); err != nil {
+		return ctrl.Result{
+			RequeueAfter: 10 * time.Second,
+		}, fmt.Errorf("failed to patch object: %w", err)
 	}
 
 	return ctrl.Result{}, nil
@@ -216,6 +214,17 @@ func (r *JobReconciler) updateJobWithOutput(ctx context.Context, log logr.Logger
 	}
 
 	if err := patchHelper.Patch(ctx, job); err != nil {
+		return fmt.Errorf("failed to patch object: %w", err)
+	}
+	return nil
+}
+
+func (r *JobReconciler) patchObject(ctx context.Context, oldObject, newObject client.Object) error {
+	patchHelper, err := patch.NewHelper(oldObject, r.Client)
+	if err != nil {
+		return fmt.Errorf("failed to create patch helper: %w", err)
+	}
+	if err := patchHelper.Patch(ctx, newObject); err != nil {
 		return fmt.Errorf("failed to patch object: %w", err)
 	}
 	return nil

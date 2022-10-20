@@ -125,8 +125,8 @@ func (r *KrokEventReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}, nil
 }
 
-func (r *KrokEventReconciler) generateJobName(commandName string) string {
-	return fmt.Sprintf("%s-job-%d", commandName, time.Now().Unix())
+func (r *KrokEventReconciler) generateJobName(eventName, commandName string) string {
+	return fmt.Sprintf("%s-job-%s", eventName, commandName)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -193,7 +193,7 @@ func (r *KrokEventReconciler) reconcileCreateJobs(ctx context.Context, logger lo
 				APIVersion: batchv1.GroupName,
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      r.generateJobName(command.Name),
+				Name:      r.generateJobName(event.Name, command.Name),
 				Namespace: command.Namespace,
 				Annotations: map[string]string{
 					krokAnnotationKey: krokAnnotationValue,
@@ -231,7 +231,11 @@ func (r *KrokEventReconciler) reconcileCreateJobs(ctx context.Context, logger lo
 
 		// Add all dependencies as a list of command names.
 		if len(command.Spec.Dependencies) > 0 {
-			job.ObjectMeta.Annotations[dependenciesKey] = strings.Join(command.Spec.Dependencies, ",")
+			var result []string
+			for _, dependency := range command.Spec.Dependencies {
+				result = append(result, r.generateJobName(event.Name, dependency))
+			}
+			job.ObjectMeta.Annotations[dependenciesKey] = strings.Join(result, ",")
 		}
 		// Set external object ControllerReference to the provider ref.
 		if err := controllerutil.SetControllerReference(event, job, r.Client.Scheme()); err != nil {
