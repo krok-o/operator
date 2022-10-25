@@ -147,9 +147,36 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}, nil
 	}
 
-	// update the owner and add the outcome.
-	// TODO: This can only happen if ALL the jobs for the event are done. I need to loop through all of the jobs
-	// for an event and check their statuses.
+	// ZagZag
+	jobsDone := true
+	for _, job := range owner.Status.Jobs {
+		j := &batchv1.Job{}
+		if err := r.Get(ctx, types.NamespacedName{
+			Name:      job.Name,
+			Namespace: job.Namespace,
+		}, j); err != nil {
+			if apierrors.IsNotFound(err) {
+				log.V(4).Info("job not found", "job", job)
+				continue
+			}
+			log.Info("re-queuing event as its jobs aren't done yet")
+			return ctrl.Result{
+				RequeueAfter: 30 * time.Second,
+			}, err
+		}
+		// We just check if all jobs succeeded here or not. If not, the event will be done later and status will be
+		// updated to Failed.
+		if j.Status.CompletionTime == nil {
+			jobsDone = false
+			break
+		}
+	}
+
+	if !jobsDone {
+		return ctrl.Result{
+			RequeueAfter: 30 * time.Second,
+		}, nil
+	}
 	newOwner := owner.DeepCopy()
 	newOwner.Status.Done = true
 	newOwner.Status.Outcome = "Success"

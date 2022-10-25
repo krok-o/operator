@@ -21,6 +21,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
+var outputDoneAnnotationKey = "output-done"
+
 // PodReconciler reconciles Pod objects
 type PodReconciler struct {
 	client.Client
@@ -64,6 +66,8 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}, fmt.Errorf("failed to generate secret output: %w", err)
 	}
 
+	pod.Annotations[outputDoneAnnotationKey] = "true"
+
 	controllerutil.RemoveFinalizer(pod, finalizer)
 	if err := r.Client.Update(ctx, pod); err != nil {
 		log.Error(err, "failed remove finalizer from pod")
@@ -79,11 +83,15 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Pod{}).
-		WithEventFilter(predicate.Or(PodUpdatePredicate{})).
+		WithEventFilter(predicate.Or(PodDeletePredicate{})).
 		Complete(r)
 }
 
 func (r *PodReconciler) outputIntoSecret(ctx context.Context, pod *corev1.Pod) error {
+	// Already got pod log
+	if _, ok := pod.Annotations[outputDoneAnnotationKey]; ok {
+		return nil
+	}
 	secretExists := true
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{
