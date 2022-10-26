@@ -115,14 +115,54 @@ func (r *KrokEventReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				RequeueAfter: 30 * time.Second,
 			}, fmt.Errorf("failed to create jobs: %w", err)
 		}
+
+		return ctrl.Result{
+			RequeueAfter: 30 * time.Second,
+		}, err
 	}
 
-	// TODO: This is why it never reconciles this event again. So we basically need to constantly check events
-	// because we use them. Or, we create some kind of dynamic watch for each job. Which ever will be more effective.
-	// This slows down the reconcile loop...
-	return ctrl.Result{
-		RequeueAfter: 30 * time.Second,
-	}, nil
+	// ZagZag
+	eventDone := true
+	for _, job := range event.Status.Jobs {
+		j := &batchv1.Job{}
+		if err := r.Get(ctx, types.NamespacedName{
+			Name:      job.Name,
+			Namespace: job.Namespace,
+		}, j); err != nil {
+			if apierrors.IsNotFound(err) {
+				log.V(4).Info("job not found", "job", job)
+				continue
+			}
+			log.Info("re-queuing event as its jobs aren't done yet")
+			return ctrl.Result{
+				RequeueAfter: 30 * time.Second,
+			}, err
+		}
+		// We just check if all jobs succeeded here or not. If not, the event will be done later and status will be
+		// updated to Failed.
+		if j.Status.CompletionTime == nil {
+			eventDone = false
+			break
+		}
+	}
+
+	if eventDone {
+		return ctrl.Result{
+			RequeueAfter: 30 * time.Second,
+		}, nil
+	}
+	newEvent := event.DeepCopy()
+	newEvent.Status.Done = true
+	newEvent.Status.Outcome = "Success"
+
+	// Patch the owner object.
+	if err := patchObject(ctx, r.Client, event, newEvent); err != nil {
+		return ctrl.Result{
+			RequeueAfter: 10 * time.Second,
+		}, fmt.Errorf("failed to patch object: %w", err)
+	}
+	// Done with this event.
+	return ctrl.Result{}, nil
 }
 
 func (r *KrokEventReconciler) generateJobName(eventName, commandName string) string {

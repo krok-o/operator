@@ -61,7 +61,7 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		log.Info("job is being deleted, remove the finalizer.")
 		newJob := job.DeepCopy()
 		controllerutil.RemoveFinalizer(newJob, finalizer)
-		if err := r.patchObject(ctx, job, newJob); err != nil {
+		if err := patchObject(ctx, r.Client, job, newJob); err != nil {
 			return ctrl.Result{
 				RequeueAfter: 10 * time.Second,
 			}, fmt.Errorf("failed to patch object: %w", err)
@@ -78,7 +78,7 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	resumeJob := func(ctx context.Context, job *batchv1.Job) (ctrl.Result, error) {
 		newJob := job.DeepCopy()
 		newJob.Spec.Suspend = pointer.Bool(false)
-		if err := r.patchObject(ctx, job, newJob); err != nil {
+		if err := patchObject(ctx, r.Client, job, newJob); err != nil {
 			return ctrl.Result{
 				RequeueAfter: 10 * time.Second,
 			}, fmt.Errorf("failed to patch object: %w", err)
@@ -90,7 +90,7 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		newEvent := event.DeepCopy()
 		event.Status.Done = true
 		event.Status.Outcome = "Failed"
-		if err := r.patchObject(ctx, event, newEvent); err != nil {
+		if err := patchObject(ctx, r.Client, event, newEvent); err != nil {
 			return ctrl.Result{
 				RequeueAfter: 10 * time.Second,
 			}, fmt.Errorf("failed to patch object: %w", err)
@@ -146,48 +146,6 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 			RequeueAfter: 30 * time.Second,
 		}, nil
 	}
-
-	// ZagZag
-	jobsDone := true
-	for _, job := range owner.Status.Jobs {
-		j := &batchv1.Job{}
-		if err := r.Get(ctx, types.NamespacedName{
-			Name:      job.Name,
-			Namespace: job.Namespace,
-		}, j); err != nil {
-			if apierrors.IsNotFound(err) {
-				log.V(4).Info("job not found", "job", job)
-				continue
-			}
-			log.Info("re-queuing event as its jobs aren't done yet")
-			return ctrl.Result{
-				RequeueAfter: 30 * time.Second,
-			}, err
-		}
-		// We just check if all jobs succeeded here or not. If not, the event will be done later and status will be
-		// updated to Failed.
-		if j.Status.CompletionTime == nil {
-			jobsDone = false
-			break
-		}
-	}
-
-	if !jobsDone {
-		return ctrl.Result{
-			RequeueAfter: 30 * time.Second,
-		}, nil
-	}
-	newOwner := owner.DeepCopy()
-	newOwner.Status.Done = true
-	newOwner.Status.Outcome = "Success"
-
-	// Patch the owner object.
-	if err := r.patchObject(ctx, owner, newOwner); err != nil {
-		return ctrl.Result{
-			RequeueAfter: 10 * time.Second,
-		}, fmt.Errorf("failed to patch object: %w", err)
-	}
-
 	return ctrl.Result{}, nil
 }
 
@@ -245,17 +203,6 @@ func (r *JobReconciler) updateJobWithOutput(ctx context.Context, log logr.Logger
 	}
 
 	if err := patchHelper.Patch(ctx, job); err != nil {
-		return fmt.Errorf("failed to patch object: %w", err)
-	}
-	return nil
-}
-
-func (r *JobReconciler) patchObject(ctx context.Context, oldObject, newObject client.Object) error {
-	patchHelper, err := patch.NewHelper(oldObject, r.Client)
-	if err != nil {
-		return fmt.Errorf("failed to create patch helper: %w", err)
-	}
-	if err := patchHelper.Patch(ctx, newObject); err != nil {
 		return fmt.Errorf("failed to patch object: %w", err)
 	}
 	return nil
