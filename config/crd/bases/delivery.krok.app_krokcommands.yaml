@@ -58,19 +58,23 @@ spec:
                 items:
                   type: string
                 type: array
-              readInputFromSecret:
+              readInputFromSecrets:
                 description: ReadInputFromSecret if defined, the command will take
                   a list of key/value pairs in a secret and apply them as arguments
                   to the command.
-                properties:
-                  name:
-                    type: string
-                  namespace:
-                    type: string
-                required:
-                - name
-                - namespace
-                type: object
+                items:
+                  description: Ref points to a secret which contains access information
+                    for the repository.
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                type: array
               schedule:
                 description: 'Schedule of the command. example: 0 * * * * // follows
                   cron job syntax.'

@@ -26,19 +26,76 @@ type KrokEventSpec struct {
 	Payload string `json:"payload"`
 	// Type defines the event type such as: push, pull, ping...
 	Type string `json:"type"`
+	// CommandsToRun contains a list of commands that this event needs to execute.
+	CommandsToRun []KrokCommand `json:"CommandsToRun"`
+}
+
+// GetCommandsToRun returns a list of commands that needs to be executed.
+func (in KrokEvent) GetCommandsToRun() []KrokCommand {
+	result := make([]KrokCommand, 0)
+	for _, cmd := range in.Spec.CommandsToRun {
+		if in.Status.FailedCommands.Has(cmd.Name) || in.Status.SucceededCommands.Has(cmd.Name) {
+			continue
+		}
+
+		result = append(result, cmd)
+	}
+
+	return result
+}
+
+// Command contains details about the outcome of a job and the name.
+type Command struct {
+	Name    string `json:"name"`
+	Outcome string `json:"outcome"`
+}
+
+type CommandList []Command
+
+func (c CommandList) Has(name string) bool {
+	for _, cmd := range c {
+		if cmd.Name == name {
+			return true
+		}
+	}
+
+	return false
 }
 
 // KrokEventStatus defines the observed state of KrokEvent
 type KrokEventStatus struct {
-	// Done defines if an event is done or not.
+	// FailedJobs contains command runs which failed for a given event.
 	// +optional
-	Done bool `json:"done,omitempty"`
-	// Outcome holds the outcome of the event such as success, failed...
+	FailedCommands CommandList `json:"failedCommands,omitempty"`
+	// SucceededJobs contains command runs which succeeded for a given event.
 	// +optional
-	Outcome string `json:"outcome,omitempty"`
-	// Jobs contains current running jobs for this event.
+	SucceededCommands CommandList `json:"succeededCommands,omitempty"`
+	// RunningCommands contains commands which are currently in-progress.
 	// +optional
-	Jobs []Ref `json:"jobs,omitempty"`
+	RunningCommands map[string]bool `json:"runningCommands,omitempty"`
+
+	// ObservedGeneration is the last reconciled generation.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// GetConditions returns the status conditions of the object.
+func (in KrokEvent) GetConditions() []metav1.Condition {
+	return in.Status.Conditions
+}
+
+// SetConditions sets the status conditions on the object.
+func (in *KrokEvent) SetConditions(conditions []metav1.Condition) {
+	in.Status.Conditions = conditions
+}
+
+// GetStatusConditions returns a pointer to the Status.Conditions slice.
+// Deprecated: use GetConditions instead.
+func (in *KrokEvent) GetStatusConditions() *[]metav1.Condition {
+	return &in.Status.Conditions
 }
 
 //+kubebuilder:object:root=true

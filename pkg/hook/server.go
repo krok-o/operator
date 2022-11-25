@@ -13,6 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -86,7 +87,8 @@ func (s *Server) Handler(w http.ResponseWriter, request *http.Request) {
 	}
 
 	repository := &v1alpha1.KrokRepository{}
-	if err := s.Client.Get(context.Background(), types.NamespacedName{
+	ctx := context.Background()
+	if err := s.Client.Get(ctx, types.NamespacedName{
 		Name:      repo,
 		Namespace: s.Namespace,
 	}, repository); err != nil {
@@ -95,7 +97,7 @@ func (s *Server) Handler(w http.ResponseWriter, request *http.Request) {
 	}
 
 	auth := &corev1.Secret{}
-	if err := s.Client.Get(context.Background(), types.NamespacedName{
+	if err := s.Client.Get(ctx, types.NamespacedName{
 		Name:      repository.Spec.AuthSecretRef.Name,
 		Namespace: repository.Spec.AuthSecretRef.Namespace,
 	}, auth); err != nil {
@@ -114,7 +116,7 @@ func (s *Server) Handler(w http.ResponseWriter, request *http.Request) {
 	rdr1 := io.NopCloser(bytes.NewBuffer(buf))
 	rdr2 := io.NopCloser(bytes.NewBuffer(buf))
 	request.Body = rdr1
-	ping, err := provider.ValidateRequest(context.Background(), request, string(secret))
+	ping, err := provider.ValidateRequest(ctx, request, string(secret))
 	if err != nil {
 		logAndFail(http.StatusBadRequest, err, "failed to validate request")
 		return
@@ -132,7 +134,7 @@ func (s *Server) Handler(w http.ResponseWriter, request *http.Request) {
 	}
 
 	// This should only happen if it wasn't a `Ping` event which is the initial registration.
-	eventType, err := provider.GetEventType(context.Background(), request)
+	eventType, err := provider.GetEventType(ctx, request)
 	if err != nil {
 		logAndFail(http.StatusBadRequest, err, "failed to get event type")
 		return
@@ -151,6 +153,43 @@ func (s *Server) Handler(w http.ResponseWriter, request *http.Request) {
 			Type:    eventType,
 		},
 	}
+
+	supportsPlatform := func(platforms []string) bool {
+		for _, p := range platforms {
+			if p == repository.Spec.Platform {
+				return true
+			}
+		}
+
+		return false
+	}
+	for _, commandRef := range repository.Spec.Commands {
+		command := &v1alpha1.KrokCommand{}
+		if err := s.Client.Get(ctx, types.NamespacedName{
+			Namespace: commandRef.Namespace,
+			Name:      commandRef.Name,
+		}, command); err != nil {
+			logAndFail(http.StatusBadRequest, fmt.Errorf("failed to get command object: %w", err), "failed to get command object")
+			return
+		}
+		if !command.Spec.Enabled {
+			continue
+		}
+		if !supportsPlatform(command.Spec.Platforms) {
+			s.Logger.Info(
+				"skipped command as it does not support the given platform",
+				"command",
+				klog.KObj(command),
+				"platform",
+				repository.Spec.Platform,
+				"supported-platforms",
+				command.Spec.Platforms,
+			)
+			continue
+		}
+		event.Spec.CommandsToRun = append(event.Spec.CommandsToRun, *command)
+	}
+
 	controllerutil.AddFinalizer(event, jobFinalizer)
 	// Set external object ControllerReference to the provider ref.
 	if err := controllerutil.SetControllerReference(repository, event, s.Client.Scheme()); err != nil {
@@ -158,7 +197,7 @@ func (s *Server) Handler(w http.ResponseWriter, request *http.Request) {
 		return
 	}
 
-	if err := s.Client.Create(context.Background(), event); err != nil {
+	if err := s.Client.Create(ctx, event); err != nil {
 		logAndFail(http.StatusInternalServerError, err, "failed to create Event object")
 		return
 	}

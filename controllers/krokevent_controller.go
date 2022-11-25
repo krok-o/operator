@@ -31,8 +31,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/pointer"
-	"sigs.k8s.io/cluster-api/util/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -40,12 +40,21 @@ import (
 
 	"github.com/krok-o/operator/api/v1alpha1"
 	"github.com/krok-o/operator/pkg/providers"
-	source_controller "github.com/krok-o/operator/pkg/source-controller"
+
+	sourceController "github.com/krok-o/operator/pkg/source-controller"
 )
 
 var (
 	finalizer                 = "event.krok.app/finalizer"
 	outputSecretAnnotationKey = "output-to-secret"
+
+	krokAnnotationValue = "krok-job"
+	krokAnnotationKey   = "krok-app"
+	ownerCommandName    = "command-name"
+	dependenciesKey     = "job-dependencies"
+	//outputKey           = "jobOutput"
+	beginOutputFormat = "----- BEGIN OUTPUT -----"
+	endOutputFormat   = "----- END OUTPUT -----"
 )
 
 // KrokEventReconciler reconciles a KrokEvent object
@@ -55,7 +64,7 @@ type KrokEventReconciler struct {
 
 	CommandTimeout    int
 	PlatformProviders map[string]providers.Platform
-	SourceController  *source_controller.Server
+	SourceController  *sourceController.Server
 }
 
 //+kubebuilder:rbac:groups=delivery.krok.app,resources=krokevents,verbs=get;list;watch;create;update;patch;delete
@@ -89,11 +98,6 @@ func (r *KrokEventReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return r.reconcileDelete(ctx, event)
 	}
 
-	if event.Status.Done {
-		log.Info("skip event as it's already done")
-		return ctrl.Result{}, nil
-	}
-
 	repository := &v1alpha1.KrokRepository{}
 	if err := GetParentObject(ctx, r.Client, "KrokRepository", v1alpha1.GroupVersion.Group, event, repository); err != nil {
 		return ctrl.Result{
@@ -102,67 +106,129 @@ func (r *KrokEventReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	log.V(4).Info("found repository", "repository", klog.KObj(repository))
-	if len(event.Status.Jobs) == 0 {
-		log.V(4).Info("event has no jobs, creating them", "event", klog.KObj(event))
-		artifactURL, err := r.reconcileSource(event, repository)
-		if err != nil {
-			return ctrl.Result{
-				RequeueAfter: 30 * time.Second,
-			}, fmt.Errorf("failed to checkout source: %w", err)
-		}
-		if err := r.reconcileCreateJobs(ctx, log, event, repository, artifactURL); err != nil {
-			return ctrl.Result{
-				RequeueAfter: 30 * time.Second,
-			}, fmt.Errorf("failed to create jobs: %w", err)
+	newEvent := event.DeepCopy()
+outer:
+	for _, cmd := range newEvent.GetCommandsToRun() {
+		if _, ok := newEvent.Status.RunningCommands[cmd.Name]; !ok {
+			var listOfExtraInput []v1alpha1.Ref
+			for _, dep := range cmd.Spec.Dependencies {
+				// if the dependency is in the succeeded job list...
+				// skip creation
+				if !newEvent.Status.SucceededCommands.Has(dep) {
+					continue outer
+				}
+
+				dependingCommand := &v1alpha1.KrokCommand{}
+				if err := r.Get(ctx, types.NamespacedName{
+					Name:      dep,
+					Namespace: event.Namespace,
+				}, dependingCommand); err != nil {
+					return ctrl.Result{
+						RequeueAfter: 10 * time.Second,
+					}, err
+				}
+				// If the depending job defined output, we add those to the command.
+				// TODO: Have a think about this. The job might have output which the depending command doesn't need.
+				// Maybe then the command just has to define something like, +optional.
+				if dependingCommand.Spec.CommandHasOutputToWrite {
+					listOfExtraInput = append(listOfExtraInput, v1alpha1.Ref{
+						Namespace: event.Namespace,
+						Name:      r.generateJobName(event.Name, dependingCommand.Name),
+					})
+				}
+			}
+
+			// add any extra secrets which contain any outputs from different commands
+			cmd.Spec.ReadInputFromSecrets = append(cmd.Spec.ReadInputFromSecrets, listOfExtraInput...)
+
+			artifactURL, err := r.artifactURL(newEvent, repository)
+			if err != nil {
+				return ctrl.Result{
+					RequeueAfter: 30 * time.Second,
+				}, fmt.Errorf("failed to checkout source: %w", err)
+			}
+			if err := r.createJob(ctx, log, &cmd, newEvent, repository, artifactURL); err != nil {
+				return ctrl.Result{
+					RequeueAfter: 30 * time.Second,
+				}, fmt.Errorf("failed to create jobs: %w", err)
+			}
+
+			if newEvent.Status.RunningCommands == nil {
+				newEvent.Status.RunningCommands = make(map[string]bool)
+			}
+			newEvent.Status.RunningCommands[cmd.Name] = true
+			continue
 		}
 
-		return ctrl.Result{
-			RequeueAfter: 30 * time.Second,
-		}, err
-	}
-
-	// ZagZag
-	eventDone := true
-	for _, job := range event.Status.Jobs {
-		j := &batchv1.Job{}
+		jobName := r.generateJobName(newEvent.Name, cmd.Name)
+		job := &batchv1.Job{}
 		if err := r.Get(ctx, types.NamespacedName{
-			Name:      job.Name,
-			Namespace: job.Namespace,
-		}, j); err != nil {
+			Name:      jobName,
+			Namespace: event.Namespace,
+		}, job); err != nil {
 			if apierrors.IsNotFound(err) {
-				log.V(4).Info("job not found", "job", job)
 				continue
 			}
-			log.Info("re-queuing event as its jobs aren't done yet")
 			return ctrl.Result{
 				RequeueAfter: 30 * time.Second,
-			}, err
+			}, fmt.Errorf("failed to get job: %w", err)
 		}
-		// We just check if all jobs succeeded here or not. If not, the event will be done later and status will be
-		// updated to Failed.
-		if j.Status.CompletionTime == nil {
-			eventDone = false
-			break
+
+		switch {
+		case r.HasCondition(job, batchv1.JobFailed):
+			event.Status.FailedCommands = append(event.Status.FailedCommands, v1alpha1.Command{
+				Name:    cmd.Name,
+				Outcome: r.ConditionReason(job, batchv1.JobFailed),
+			})
+			if err := r.Delete(ctx, job); err != nil {
+				return ctrl.Result{
+					RequeueAfter: 30 * time.Second,
+				}, fmt.Errorf("failed to delete job: %w", err)
+			}
+			delete(event.Status.RunningCommands, cmd.Name)
+		case r.HasCondition(job, batchv1.JobComplete):
+			event.Status.SucceededCommands = append(event.Status.SucceededCommands, v1alpha1.Command{
+				Name:    cmd.Name,
+				Outcome: "success",
+			})
+			if err := r.Delete(ctx, job); err != nil {
+				return ctrl.Result{
+					RequeueAfter: 30 * time.Second,
+				}, fmt.Errorf("failed to delete job: %w", err)
+			}
+			delete(event.Status.RunningCommands, cmd.Name)
 		}
 	}
 
-	if eventDone {
-		return ctrl.Result{
-			RequeueAfter: 30 * time.Second,
-		}, nil
-	}
-	newEvent := event.DeepCopy()
-	newEvent.Status.Done = true
-	newEvent.Status.Outcome = "Success"
-
-	// Patch the owner object.
+	// Patch the event with updated status.
 	if err := patchObject(ctx, r.Client, event, newEvent); err != nil {
 		return ctrl.Result{
 			RequeueAfter: 10 * time.Second,
 		}, fmt.Errorf("failed to patch object: %w", err)
 	}
-	// Done with this event.
+
+	// Done for now. This event will be re-triggered if one of its owning jobs is updated.
 	return ctrl.Result{}, nil
+}
+
+func (r *KrokEventReconciler) HasCondition(job *batchv1.Job, jobConditionType batchv1.JobConditionType) bool {
+	for _, cond := range job.Status.Conditions {
+		if cond.Type == jobConditionType {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (r *KrokEventReconciler) ConditionReason(job *batchv1.Job, jobConditionType batchv1.JobConditionType) string {
+	for _, cond := range job.Status.Conditions {
+		if cond.Type == jobConditionType {
+			return cond.Message
+		}
+	}
+
+	return ""
 }
 
 func (r *KrokEventReconciler) generateJobName(eventName, commandName string) string {
@@ -172,168 +238,127 @@ func (r *KrokEventReconciler) generateJobName(eventName, commandName string) str
 // SetupWithManager sets up the controller with the Manager.
 func (r *KrokEventReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.KrokEvent{}).
-		WithEventFilter(predicate.Or(ArtifactUpdatePredicate{}, DeletePredicate{})).
+		For(&v1alpha1.KrokEvent{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Owns(&batchv1.Job{}).
 		Complete(r)
 }
 
 // reconcileCreateJobs starts the jobs in a suspended state. Only after they are reconciled can they start.
-func (r *KrokEventReconciler) reconcileCreateJobs(ctx context.Context, logger logr.Logger, event *v1alpha1.KrokEvent, repository *v1alpha1.KrokRepository, url string) error {
-	supportsPlatform := func(platforms []string) bool {
-		for _, p := range platforms {
-			if p == repository.Spec.Platform {
-				return true
-			}
-		}
+func (r *KrokEventReconciler) createJob(ctx context.Context, logger logr.Logger, command *v1alpha1.KrokCommand, event *v1alpha1.KrokEvent, repository *v1alpha1.KrokRepository, url string) error {
+	logger.V(4).Info("launching the following command", "command", klog.KObj(command))
 
-		return false
+	args := []string{
+		fmt.Sprintf("--platform=%s", repository.Spec.Platform),
+		fmt.Sprintf("--event-type=%s", event.Spec.Type),
+		fmt.Sprintf("--payload=%s", event.Spec.Payload),
+		fmt.Sprintf("--artifact-url=%s", url),
 	}
-	var jobList []v1alpha1.Ref
-	for _, commandRef := range repository.Spec.Commands {
-		command := &v1alpha1.KrokCommand{}
-		if err := r.Client.Get(ctx, types.NamespacedName{
-			Namespace: commandRef.Namespace,
-			Name:      commandRef.Name,
-		}, command); err != nil {
-			return fmt.Errorf("failed to get command object: %w", err)
-		}
-		if !command.Spec.Enabled {
-			logger.Info("skipped command as it was disabled", "command", klog.KObj(command))
-			continue
-		}
-		if !supportsPlatform(command.Spec.Platforms) {
-			logger.Info(
-				"skipped command as it does not support the given platform",
-				"command",
-				klog.KObj(command),
-				"platform",
-				repository.Spec.Platform,
-				"supported-platforms",
-				command.Spec.Platforms,
-			)
-			continue
-		}
-		logger.V(4).Info("launching the following command", "command", klog.KObj(command))
-
-		args := []string{
-			fmt.Sprintf("--platform=%s", repository.Spec.Platform),
-			fmt.Sprintf("--event-type=%s", event.Spec.Type),
-			fmt.Sprintf("--payload=%s", event.Spec.Payload),
-			fmt.Sprintf("--artifact-url=%s", url),
-		}
-		var err error
-		args, err = r.readInputFromSecretIfDefined(ctx, args, command)
-		if err != nil {
-			return fmt.Errorf("failed to add user defined arguments: %w", err)
-		}
-
-		job := &batchv1.Job{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "Job",
-				APIVersion: batchv1.GroupName,
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      r.generateJobName(event.Name, command.Name),
-				Namespace: command.Namespace,
-				Annotations: map[string]string{
-					krokAnnotationKey: krokAnnotationValue,
-					ownerCommandName:  command.Name,
-				},
-			},
-			Spec: batchv1.JobSpec{
-				ActiveDeadlineSeconds: pointer.Int64(int64(r.CommandTimeout)),
-				Template: corev1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{
-						Annotations: map[string]string{
-							outputSecretAnnotationKey: fmt.Sprintf("%t", command.Spec.CommandHasOutputToWrite),
-							krokAnnotationKey:         krokAnnotationValue,
-						},
-					},
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{
-							{
-								Name:  "command",
-								Image: command.Spec.Image,
-								Args:  args,
-							},
-						},
-						RestartPolicy: "Never",
-					},
-				},
-				TTLSecondsAfterFinished: pointer.Int32(120),
-				Suspend:                 pointer.Bool(true),
-			},
-		}
-		// Only add the finalizer in case we need the output.
-		if command.Spec.CommandHasOutputToWrite {
-			job.Spec.Template.Finalizers = []string{finalizer}
-		}
-
-		// Add all dependencies as a list of command names.
-		if len(command.Spec.Dependencies) > 0 {
-			var result []string
-			for _, dependency := range command.Spec.Dependencies {
-				result = append(result, r.generateJobName(event.Name, dependency))
-			}
-			job.ObjectMeta.Annotations[dependenciesKey] = strings.Join(result, ",")
-		}
-		// Set external object ControllerReference to the provider ref.
-		if err := controllerutil.SetControllerReference(event, job, r.Client.Scheme()); err != nil {
-			return fmt.Errorf("failed to set owner reference: %w", err)
-		}
-
-		// Since this is a brand-new object, we can be sure that it will be an update.
-		controllerutil.AddFinalizer(job, finalizer)
-
-		if err := r.Create(ctx, job); err != nil {
-			return fmt.Errorf("failed to create job: %w", err)
-		}
-		jobList = append(jobList, v1alpha1.Ref{
-			Name:      job.Name,
-			Namespace: job.Namespace,
-		})
-	}
-
-	// Initialize the patch helper.
-	// This has to be initialized before updating the status.
-	patchHelper, err := patch.NewHelper(event, r.Client)
+	var err error
+	args, err = r.readInputFromSecrets(ctx, args, command)
 	if err != nil {
-		return fmt.Errorf("failed to create patch helper: %w", err)
+		return fmt.Errorf("failed to add user defined arguments: %w", err)
 	}
 
-	event.Status = v1alpha1.KrokEventStatus{
-		Jobs: jobList,
-		Done: false,
+	job := &batchv1.Job{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Job",
+			APIVersion: batchv1.GroupName,
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      r.generateJobName(event.Name, command.Name),
+			Namespace: command.Namespace,
+			Annotations: map[string]string{
+				krokAnnotationKey: krokAnnotationValue,
+				ownerCommandName:  command.Name,
+			},
+		},
+		Spec: batchv1.JobSpec{
+			ActiveDeadlineSeconds: pointer.Int64(int64(r.CommandTimeout)),
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						outputSecretAnnotationKey: fmt.Sprintf("%t", command.Spec.CommandHasOutputToWrite),
+						krokAnnotationKey:         krokAnnotationValue,
+					},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "command",
+							Image: command.Spec.Image,
+							Args:  args,
+						},
+					},
+					RestartPolicy: "Never",
+				},
+			},
+			TTLSecondsAfterFinished: pointer.Int32(120),
+			Suspend:                 pointer.Bool(true),
+		},
+	}
+	// Only add the finalizer in case we need the output.
+	if command.Spec.CommandHasOutputToWrite {
+		job.Spec.Template.Finalizers = []string{finalizer}
 	}
 
-	// Patch the source object.
-	if err := patchHelper.Patch(ctx, event); err != nil {
-		return fmt.Errorf("failed to patch event object: %w", err)
+	// Add all dependencies as a list of command names.
+	if len(command.Spec.Dependencies) > 0 {
+		var result []string
+		for _, dependency := range command.Spec.Dependencies {
+			result = append(result, r.generateJobName(event.Name, dependency))
+		}
+		job.ObjectMeta.Annotations[dependenciesKey] = strings.Join(result, ",")
+	}
+	// Set external object ControllerReference to the provider ref.
+	if err := controllerutil.SetControllerReference(event, job, r.Client.Scheme()); err != nil {
+		return fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
+	if err := r.Create(ctx, job); err != nil {
+		return fmt.Errorf("failed to create job: %w", err)
+	}
 	return nil
 }
 
-func (r *KrokEventReconciler) readInputFromSecretIfDefined(ctx context.Context, args []string, command *v1alpha1.KrokCommand) ([]string, error) {
-	if command.Spec.ReadInputFromSecret == nil {
+func (r *KrokEventReconciler) readInputFromSecrets(ctx context.Context, args []string, command *v1alpha1.KrokCommand) ([]string, error) {
+	if len(command.Spec.ReadInputFromSecrets) == 0 {
 		return args, nil
 	}
-	secret := &corev1.Secret{}
-	if err := r.Get(ctx, types.NamespacedName{
-		Namespace: command.Spec.ReadInputFromSecret.Namespace,
-		Name:      command.Spec.ReadInputFromSecret.Name,
-	}, secret); err != nil {
-		return nil, fmt.Errorf("failed to get secret which was requested: %w", err)
-	}
-	for k, v := range secret.Data {
-		args = append(args, fmt.Sprintf("--%s=%s", k, v))
-	}
+	for _, input := range command.Spec.ReadInputFromSecrets {
+		secret := &corev1.Secret{}
+		if err := r.Get(ctx, types.NamespacedName{
+			Namespace: input.Namespace,
+			Name:      input.Name,
+		}, secret); err != nil {
+			return nil, fmt.Errorf("failed to get secret which was requested: %w", err)
+		}
+		// process output from other commands
+		if data, ok := secret.Data["output"]; ok {
+			s := string(data)
+			beginIndex := strings.Index(s, beginOutputFormat)
+			if beginIndex == -1 {
+				continue
+			}
 
+			endIndex := strings.Index(s, endOutputFormat)
+			between := s[beginIndex+len(beginOutputFormat)+1 : endIndex]
+			split := strings.Split(between, "\n")
+			for _, part := range split {
+				// I'm creating the job, so I know there is only a single container specification.
+				args = append(args, fmt.Sprintf("--%s", part))
+			}
+		} else {
+			// process manually provided key values
+			for k, v := range secret.Data {
+				args = append(args, fmt.Sprintf("--%s=%s", k, v))
+			}
+		}
+	}
 	return args, nil
 }
 
-// reconcileSource will fetch the code content based on the given repository parameters.
-func (r *KrokEventReconciler) reconcileSource(event *v1alpha1.KrokEvent, repository *v1alpha1.KrokRepository) (string, error) {
+// artifactURL will fetch the code content based on the given repository parameters.
+func (r *KrokEventReconciler) artifactURL(event *v1alpha1.KrokEvent, repository *v1alpha1.KrokRepository) (string, error) {
 	provider, ok := r.PlatformProviders[repository.Spec.Platform]
 	if !ok {
 		return "", fmt.Errorf("platform %q not supported", repository.Spec.Platform)
@@ -351,58 +376,6 @@ func (r *KrokEventReconciler) reconcileDelete(ctx context.Context, event *v1alph
 	log := logr.FromContextOrDiscard(ctx).WithValues("event", klog.KObj(event))
 
 	log.Info("deleting event and jobs")
-
-	for i := 0; i < len(event.Status.Jobs); i++ {
-		job := &batchv1.Job{}
-		if err := r.Client.Get(ctx, types.NamespacedName{
-			Namespace: event.Status.Jobs[i].Namespace,
-			Name:      event.Status.Jobs[i].Name,
-		}, job); err != nil {
-			if apierrors.IsNotFound(err) {
-				event.Status.Jobs = append(event.Status.Jobs[:i], event.Status.Jobs[i+1:]...)
-				i--
-				continue
-			}
-
-			log.Error(err, "failed to remove job from event")
-			return ctrl.Result{
-				RequeueAfter: 20 * time.Second,
-			}, fmt.Errorf("failed to remove job from event: %w", err)
-		}
-
-		// Remove our finalizer from the list and update it
-		controllerutil.RemoveFinalizer(job, finalizer)
-		if err := r.Client.Update(ctx, job); err != nil {
-			log.Error(err, "failed to remove job")
-			return ctrl.Result{
-				RequeueAfter: 20 * time.Second,
-			}, fmt.Errorf("failed to update job: %w", err)
-		}
-
-		// Re-get so we deal with the latest revision. Also, once the finalizer has been removed
-		// it might be possible that the job is deleted by the time we are trying to delete it.
-		if err := r.Client.Get(ctx, types.NamespacedName{
-			Namespace: event.Status.Jobs[i].Namespace,
-			Name:      event.Status.Jobs[i].Name,
-		}, job); err != nil {
-			if apierrors.IsNotFound(err) {
-				continue
-			}
-			return ctrl.Result{
-				RequeueAfter: 20 * time.Second,
-			}, fmt.Errorf("failed to get job for other reason than it's not found: %w", err)
-		}
-
-		background := metav1.DeletePropagationBackground
-		if err := r.Client.Delete(ctx, job, &client.DeleteOptions{
-			PropagationPolicy: &background,
-		}); err != nil {
-			log.Error(err, "failed to remove job")
-			return ctrl.Result{
-				RequeueAfter: 20 * time.Second,
-			}, fmt.Errorf("failed to remove job: %w", err)
-		}
-	}
 
 	// Remove our finalizer from the list and update it
 	controllerutil.RemoveFinalizer(event, finalizer)

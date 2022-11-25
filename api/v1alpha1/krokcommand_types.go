@@ -24,7 +24,7 @@ import (
 type KrokCommandSpec struct {
 	// ReadInputFromSecret if defined, the command will take a list of key/value pairs in a secret
 	// and apply them as arguments to the command.
-	ReadInputFromSecret *Ref `json:"readInputFromSecret,omitempty"`
+	ReadInputFromSecrets []Ref `json:"readInputFromSecrets,omitempty"`
 	// CommandHasOutputToWrite if defined, it signals the underlying Job, to put its output into a generated
 	// and created secret.
 	CommandHasOutputToWrite bool `json:"commandHasOutputToWrite,omitempty"`
