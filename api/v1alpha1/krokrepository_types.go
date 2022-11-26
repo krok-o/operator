@@ -59,6 +59,8 @@ type KrokRepositorySpec struct {
 	Commands []CommandRef `json:"commands,omitempty"`
 	// Events contains all events that this repository subscribes to.
 	Events []string `json:"events,omitempty"`
+	// EventReconcileInterval can be set to define how often a created KrokEvent should requeue itself.
+	EventReconcileInterval string `json:"eventReconcileInterval,omitempty"`
 }
 
 // KrokRepositoryStatus defines the observed state of KrokRepository

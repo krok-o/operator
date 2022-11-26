@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: krok-controller
+  namespace: krok-system
+  labels:
+    control-plane: krok-controller
+spec:
+  template:
+    spec:
+      containers:
+      - name: manager
+        env:
+        - name: PUBLIC_HOST
+          value: 89.134.172.87:9998

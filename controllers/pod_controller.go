@@ -66,14 +66,15 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}, fmt.Errorf("failed to generate secret output: %w", err)
 	}
 
-	pod.Annotations[outputDoneAnnotationKey] = "true"
+	newPod := pod.DeepCopy()
+	newPod.Annotations[outputDoneAnnotationKey] = "true"
 
-	controllerutil.RemoveFinalizer(pod, finalizer)
-	if err := r.Client.Update(ctx, pod); err != nil {
-		log.Error(err, "failed remove finalizer from pod")
+	controllerutil.RemoveFinalizer(newPod, finalizer)
+	if err := patchObject(ctx, r.Client, pod, newPod); err != nil {
+		log.Error(err, "failed patch pod")
 		return ctrl.Result{
 			RequeueAfter: 20 * time.Second,
-		}, fmt.Errorf("failed to update job: %w", err)
+		}, fmt.Errorf("failed to patch job: %w", err)
 	}
 
 	return ctrl.Result{}, nil

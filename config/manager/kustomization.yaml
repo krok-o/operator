@@ -1,2 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
 resources:
 - manager.yaml
+images:
+- name: controller
+  newName: controller
+  newTag: latest
+- name: krok-o/krok-controller
+  newName: localhost:5001/krok-o/krok-controller
+  newTag: v0.0.1
+patchesStrategicMerge:
+- environment_values_patch.yaml
