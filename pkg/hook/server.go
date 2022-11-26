@@ -149,8 +149,9 @@ func (s *Server) Handler(w http.ResponseWriter, request *http.Request) {
 			Namespace: repository.Namespace,
 		},
 		Spec: v1alpha1.KrokEventSpec{
-			Payload: string(content),
-			Type:    eventType,
+			Payload:  string(content),
+			Type:     eventType,
+			Interval: repository.Spec.EventReconcileInterval,
 		},
 	}
 

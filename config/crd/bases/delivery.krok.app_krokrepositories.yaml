@@ -61,6 +61,10 @@ spec:
                   - namespace
                   type: object
                 type: array
+              eventReconcileInterval:
+                description: EventReconcileInterval can be set to define how often
+                  a created KrokEvent should requeue itself.
+                type: string
               events:
                 description: Events contains all events that this repository subscribes
                   to.
@@ -204,6 +208,10 @@ spec:
                                 - spec
                                 type: object
                               type: array
+                            interval:
+                              description: Interval defines a time.Duration at which
+                                this event should reconcile itself.
+                              type: string
                             payload:
                               description: Payload is the received event payload from
                                 the provider.
@@ -214,6 +222,7 @@ spec:
                               type: string
                           required:
                           - commandsToRun
+                          - interval
                           - payload
                           - type
                           type: object

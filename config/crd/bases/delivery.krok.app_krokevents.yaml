@@ -100,6 +100,10 @@ spec:
                   - spec
                   type: object
                 type: array
+              interval:
+                description: Interval defines a time.Duration at which this event
+                  should reconcile itself.
+                type: string
               payload:
                 description: Payload is the received event payload from the provider.
                 type: string
@@ -108,6 +112,7 @@ spec:
                 type: string
             required:
             - commandsToRun
+            - interval
             - payload
             - type
             type: object

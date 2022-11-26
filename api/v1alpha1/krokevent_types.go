@@ -17,6 +17,8 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"time"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -34,6 +36,17 @@ type KrokEventSpec struct {
 	Type string `json:"type"`
 	// CommandsToRun contains a list of commands that this event needs to execute.
 	CommandsToRun []CommandTemplate `json:"commandsToRun"`
+	// Interval defines a time.Duration at which this event should reconcile itself.
+	Interval string `json:"interval"`
+}
+
+// GetRequeueInterval parses the Interval to a duration. Exp.: 10m5s.
+func (in KrokEvent) GetRequeueInterval() time.Duration {
+	d, err := time.ParseDuration(in.Spec.Interval)
+	if err != nil {
+		d = 5 * time.Second
+	}
+	return d
 }
 
 // GetCommandsToRun returns a list of commands that needs to be executed.
