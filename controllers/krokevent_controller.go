@@ -40,7 +40,6 @@ import (
 
 	"github.com/krok-o/operator/api/v1alpha1"
 	"github.com/krok-o/operator/pkg/providers"
-
 	sourceController "github.com/krok-o/operator/pkg/source-controller"
 )
 
@@ -244,8 +243,8 @@ func (r *KrokEventReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // reconcileCreateJobs starts the jobs in a suspended state. Only after they are reconciled can they start.
-func (r *KrokEventReconciler) createJob(ctx context.Context, logger logr.Logger, command *v1alpha1.KrokCommand, event *v1alpha1.KrokEvent, repository *v1alpha1.KrokRepository, url string) error {
-	logger.V(4).Info("launching the following command", "command", klog.KObj(command))
+func (r *KrokEventReconciler) createJob(ctx context.Context, logger logr.Logger, command *v1alpha1.CommandTemplate, event *v1alpha1.KrokEvent, repository *v1alpha1.KrokRepository, url string) error {
+	logger.V(4).Info("launching the following command", "command", command.Name)
 
 	args := []string{
 		fmt.Sprintf("--platform=%s", repository.Spec.Platform),
@@ -266,7 +265,7 @@ func (r *KrokEventReconciler) createJob(ctx context.Context, logger logr.Logger,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.generateJobName(event.Name, command.Name),
-			Namespace: command.Namespace,
+			Namespace: event.Namespace,
 			Annotations: map[string]string{
 				krokAnnotationKey: krokAnnotationValue,
 				ownerCommandName:  command.Name,
@@ -293,7 +292,6 @@ func (r *KrokEventReconciler) createJob(ctx context.Context, logger logr.Logger,
 				},
 			},
 			TTLSecondsAfterFinished: pointer.Int32(120),
-			Suspend:                 pointer.Bool(true),
 		},
 	}
 	// Only add the finalizer in case we need the output.
@@ -320,7 +318,7 @@ func (r *KrokEventReconciler) createJob(ctx context.Context, logger logr.Logger,
 	return nil
 }
 
-func (r *KrokEventReconciler) readInputFromSecrets(ctx context.Context, args []string, command *v1alpha1.KrokCommand) ([]string, error) {
+func (r *KrokEventReconciler) readInputFromSecrets(ctx context.Context, args []string, command *v1alpha1.CommandTemplate) ([]string, error) {
 	if len(command.Spec.ReadInputFromSecrets) == 0 {
 		return args, nil
 	}

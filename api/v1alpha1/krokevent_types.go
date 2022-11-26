@@ -20,6 +20,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// CommandTemplate contains command specifications.
+type CommandTemplate struct {
+	Spec KrokCommandSpec `json:"spec"`
+	Name string          `json:"name"`
+}
+
 // KrokEventSpec defines the desired state of KrokEvent
 type KrokEventSpec struct {
 	// Payload is the received event payload from the provider.
@@ -27,12 +33,12 @@ type KrokEventSpec struct {
 	// Type defines the event type such as: push, pull, ping...
 	Type string `json:"type"`
 	// CommandsToRun contains a list of commands that this event needs to execute.
-	CommandsToRun []KrokCommand `json:"CommandsToRun"`
+	CommandsToRun []CommandTemplate `json:"commandsToRun"`
 }
 
 // GetCommandsToRun returns a list of commands that needs to be executed.
-func (in KrokEvent) GetCommandsToRun() []KrokCommand {
-	result := make([]KrokCommand, 0)
+func (in KrokEvent) GetCommandsToRun() []CommandTemplate {
+	result := make([]CommandTemplate, 0)
 	for _, cmd := range in.Spec.CommandsToRun {
 		if in.Status.FailedCommands.Has(cmd.Name) || in.Status.SucceededCommands.Has(cmd.Name) {
 			continue

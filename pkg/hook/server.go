@@ -187,7 +187,10 @@ func (s *Server) Handler(w http.ResponseWriter, request *http.Request) {
 			)
 			continue
 		}
-		event.Spec.CommandsToRun = append(event.Spec.CommandsToRun, *command)
+		event.Spec.CommandsToRun = append(event.Spec.CommandsToRun, v1alpha1.CommandTemplate{
+			Name: command.Name,
+			Spec: command.Spec,
+		})
 	}
 
 	controllerutil.AddFinalizer(event, jobFinalizer)

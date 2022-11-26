@@ -33,23 +33,4 @@ flux install \
 
 Then, all I have to do is use GitRepository objects as stated above.
 
-And, since I would create them programmatically, the event will pause until the source is reconciled.
-
-```go
-  if err := wait.PollImmediate(2*time.Second, 1*time.Minute,
-    func() (done bool, err error) {
-      namespacedName := types.NamespacedName{
-        Namespace: gitRepository.GetNamespace(),
-        Name:      gitRepository.GetName(),
-      }
-      if err := kubeClient.Get(ctx, namespacedName, gitRepository); err != nil {
-        return false, err
-      }
-      return meta.IsStatusConditionTrue(gitRepository.Status.Conditions, apimeta.ReadyCondition), nil
-    }); err != nil {
-    fmt.Println(err)
-  }
-```
-
-Just tested manually. This works nicely. Flux will create a URL for the artifact and I can specify the exact commit SHA.
-I also need to reference a secret that is the authentication required for GitRepository to work.
+I reimplement this with my own source-controller.
