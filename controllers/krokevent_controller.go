@@ -213,7 +213,9 @@ outer:
 	}
 
 	// Done for now. This event will be re-triggered if one of its owning jobs is updated.
-	return ctrl.Result{}, nil
+	return ctrl.Result{
+		RequeueAfter: 5 * time.Second,
+	}, nil
 }
 
 // HasCondition verifies if a Job has a given condition in its list of conditions.
