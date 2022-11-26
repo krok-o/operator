@@ -42,6 +42,7 @@ spec:
         - name: PUBLIC_HOST
           value: krok.app
         image: krok-o/krok-controller:latest
+        imagePullPolicy: Always
         name: manager
         ports:
         - containerPort: 9998

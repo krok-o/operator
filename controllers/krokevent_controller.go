@@ -146,6 +146,7 @@ outer:
 					RequeueAfter: 30 * time.Second,
 				}, fmt.Errorf("failed to checkout source: %w", err)
 			}
+			log.Info("creating a new job", "job", r.generateJobName(newEvent.Name, cmd.Name))
 			if err := r.createJob(ctx, log, &cmd, newEvent, repository, artifactURL); err != nil {
 				return ctrl.Result{
 					RequeueAfter: 30 * time.Second,
@@ -159,11 +160,12 @@ outer:
 			continue
 		}
 
+		log.Info("command is in running list", "name", cmd.Name)
 		jobName := r.generateJobName(newEvent.Name, cmd.Name)
 		job := &batchv1.Job{}
 		if err := r.Get(ctx, types.NamespacedName{
 			Name:      jobName,
-			Namespace: event.Namespace,
+			Namespace: newEvent.Namespace,
 		}, job); err != nil {
 			if apierrors.IsNotFound(err) {
 				continue
@@ -172,30 +174,34 @@ outer:
 				RequeueAfter: 30 * time.Second,
 			}, fmt.Errorf("failed to get job: %w", err)
 		}
-
+		background := metav1.DeletePropagationBackground
 		switch {
 		case r.HasCondition(job, batchv1.JobFailed):
-			event.Status.FailedCommands = append(event.Status.FailedCommands, v1alpha1.Command{
+			newEvent.Status.FailedCommands = append(newEvent.Status.FailedCommands, v1alpha1.Command{
 				Name:    cmd.Name,
 				Outcome: r.ConditionReason(job, batchv1.JobFailed),
 			})
-			if err := r.Delete(ctx, job); err != nil {
+			if err := r.Delete(ctx, job, &client.DeleteOptions{
+				PropagationPolicy: &background,
+			}); err != nil {
 				return ctrl.Result{
 					RequeueAfter: 30 * time.Second,
 				}, fmt.Errorf("failed to delete job: %w", err)
 			}
-			delete(event.Status.RunningCommands, cmd.Name)
+			delete(newEvent.Status.RunningCommands, cmd.Name)
 		case r.HasCondition(job, batchv1.JobComplete):
-			event.Status.SucceededCommands = append(event.Status.SucceededCommands, v1alpha1.Command{
+			newEvent.Status.SucceededCommands = append(newEvent.Status.SucceededCommands, v1alpha1.Command{
 				Name:    cmd.Name,
 				Outcome: "success",
 			})
-			if err := r.Delete(ctx, job); err != nil {
+			if err := r.Delete(ctx, job, &client.DeleteOptions{
+				PropagationPolicy: &background,
+			}); err != nil {
 				return ctrl.Result{
 					RequeueAfter: 30 * time.Second,
 				}, fmt.Errorf("failed to delete job: %w", err)
 			}
-			delete(event.Status.RunningCommands, cmd.Name)
+			delete(newEvent.Status.RunningCommands, cmd.Name)
 		}
 	}
 
@@ -210,6 +216,7 @@ outer:
 	return ctrl.Result{}, nil
 }
 
+// HasCondition verifies if a Job has a given condition in its list of conditions.
 func (r *KrokEventReconciler) HasCondition(job *batchv1.Job, jobConditionType batchv1.JobConditionType) bool {
 	for _, cond := range job.Status.Conditions {
 		if cond.Type == jobConditionType {
@@ -220,6 +227,7 @@ func (r *KrokEventReconciler) HasCondition(job *batchv1.Job, jobConditionType ba
 	return false
 }
 
+// ConditionReason returns the reason the condition had if any.
 func (r *KrokEventReconciler) ConditionReason(job *batchv1.Job, jobConditionType batchv1.JobConditionType) string {
 	for _, cond := range job.Status.Conditions {
 		if cond.Type == jobConditionType {
@@ -313,6 +321,9 @@ func (r *KrokEventReconciler) createJob(ctx context.Context, logger logr.Logger,
 	}
 
 	if err := r.Create(ctx, job); err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			return nil
+		}
 		return fmt.Errorf("failed to create job: %w", err)
 	}
 	return nil
@@ -376,9 +387,10 @@ func (r *KrokEventReconciler) reconcileDelete(ctx context.Context, event *v1alph
 	log.Info("deleting event and jobs")
 
 	// Remove our finalizer from the list and update it
-	controllerutil.RemoveFinalizer(event, finalizer)
+	newEvent := event.DeepCopy()
+	controllerutil.RemoveFinalizer(newEvent, finalizer)
 
-	if err := r.Update(ctx, event); err != nil {
+	if err := patchObject(ctx, r.Client, event, newEvent); err != nil {
 		log.Error(err, "failed to update event to remove the finalizer")
 		return ctrl.Result{
 			RequeueAfter: 10 * time.Second,
