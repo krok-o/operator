@@ -54,7 +54,7 @@ func TestGithub_CreateHook(t *testing.T) {
 		Spec: v1alpha1.KrokRepositorySpec{
 			URL:      "https://github.com/krok-o/krok",
 			Platform: v1alpha1.GITHUB,
-			Events:   []string{"push"},
+			Events:   map[string][]string{"github": {"push"}},
 		},
 		Status: v1alpha1.KrokRepositoryStatus{
 			UniqueURL: "https://krok.com/hooks/0/0/callback",

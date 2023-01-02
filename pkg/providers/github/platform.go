@@ -183,8 +183,12 @@ func (g *Platform) CreateHook(ctx context.Context, repo *v1alpha1.KrokRepository
 		return errors.New("failed to extract repo user from the url")
 	}
 	repoUser := m[0][4]
+	events, ok := repo.Spec.Events[v1alpha1.GITHUB]
+	if !ok {
+		return errors.New("no events found for provider 'github'")
+	}
 	hook, resp, err := githubClient.Repositories.CreateHook(context.Background(), repoUser, repoName, &ggithub.Hook{
-		Events: repo.Spec.Events,
+		Events: events,
 		Name:   ggithub.String("web"),
 		Active: ggithub.Bool(true),
 		Config: config,
