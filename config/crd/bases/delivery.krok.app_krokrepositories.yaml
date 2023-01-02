@@ -66,11 +66,13 @@ spec:
                   a created KrokEvent should requeue itself.
                 type: string
               events:
-                description: Events contains all events that this repository subscribes
-                  to.
-                items:
-                  type: string
-                type: array
+                additionalProperties:
+                  items:
+                    type: string
+                  type: array
+                description: 'Events contains all events that this repository subscribes
+                  to. Format is events: github: - push - issue_comment gitlab: - note'
+                type: object
               gitLab:
                 description: GitLab specific settings.
                 properties:
@@ -81,7 +83,7 @@ spec:
                 type: object
               platform:
                 description: 'Platform defines on which platform this repository is
-                  in. Exp.: GitHub, GitLab, Gitea...'
+                  in. Exp.: github, gitlab, gitea...'
                 type: string
               providerTokenSecretRef:
                 description: ProviderTokenSecretRef contains the ref to the secret
@@ -109,8 +111,9 @@ spec:
             description: KrokRepositoryStatus defines the observed state of KrokRepository
             properties:
               events:
-                description: Events contains run outputs for command runs that have
+                description: 'Events contains run outputs for command runs that have
                   been executed for this Repository. This holds the last 10 outcomes.
+                  TODO: Update this field.'
                 properties:
                   apiVersion:
                     description: 'APIVersion defines the versioned schema of this

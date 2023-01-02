@@ -41,7 +41,7 @@ type KrokRepositorySpec struct {
 	// URL of the repository.
 	// +kubebuilder:validation:Required
 	URL string `json:"url"`
-	// Platform defines on which platform this repository is in. Exp.: GitHub, GitLab, Gitea...
+	// Platform defines on which platform this repository is in. Exp.: github, gitlab, gitea...
 	// +kubebuilder:validation:Required
 	Platform string `json:"platform"`
 	// GitLab specific settings.
@@ -58,7 +58,14 @@ type KrokRepositorySpec struct {
 	// +optional
 	Commands []CommandRef `json:"commands,omitempty"`
 	// Events contains all events that this repository subscribes to.
-	Events []string `json:"events,omitempty"`
+	// Format is
+	// events:
+	//   github:
+	//   - push
+	//   - issue_comment
+	//   gitlab:
+	//   - note
+	Events map[string][]string `json:"events,omitempty"`
 	// EventReconcileInterval can be set to define how often a created KrokEvent should requeue itself.
 	EventReconcileInterval string `json:"eventReconcileInterval,omitempty"`
 }
@@ -69,6 +76,7 @@ type KrokRepositoryStatus struct {
 	UniqueURL string `json:"uniqueURL,omitempty"`
 	// Events contains run outputs for command runs that have been executed for this Repository.
 	// This holds the last 10 outcomes.
+	// TODO: Update this field.
 	Events KrokEventList `json:"events,omitempty"`
 }
 
