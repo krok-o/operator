@@ -26,7 +26,7 @@ load('ext://restart_process', 'docker_build_with_restart')
 
 local_resource(
     'krok-controller-binary',
-    "CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/manager ./",
+    "CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o bin/manager ./main.go",
     deps = [
         "main.go",
         "go.mod",
@@ -37,12 +37,6 @@ local_resource(
     ],
 )
 
-# Build the docker image for our controller. We use a specific Dockerfile
-# since tilt can't run on a scratch container.
-# `only` here is important, otherwise, the container will get updated
-# on _any_ file change. We only want to monitor the binary.
-# If debugging is enabled, we switch to a different docker file using
-# the delve port.
 entrypoint = ['/manager']
 dockerfile = 'tilt.dockerfile'
 docker_build_with_restart(

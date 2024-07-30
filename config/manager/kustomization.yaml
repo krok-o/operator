@@ -5,6 +5,6 @@ resources:
 images:
 - name: krok-o/krok-controller
   newName: ghcr.io/krok-o/krok-controller
-  newTag: v0.0.1
+  newTag: v0.8.0
 patchesStrategicMerge:
 - environment_values_patch.yaml

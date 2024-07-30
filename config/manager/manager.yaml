@@ -41,8 +41,7 @@ spec:
               fieldPath: metadata.namespace
         - name: PUBLIC_HOST
           value: krok.app
-        image: krok-o/krok-controller:latest
-        imagePullPolicy: Always
+        image: krok-o/krok-controller
         name: manager
         ports:
         - containerPort: 9998
@@ -57,8 +56,6 @@ spec:
         volumeMounts:
           - mountPath: /data
             name: data
-          - mountPath: /tmp
-            name: tmp
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -88,5 +85,3 @@ spec:
       volumes:
         - emptyDir: {}
           name: data
-        - emptyDir: {}
-          name: tmp
