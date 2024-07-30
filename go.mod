@@ -1,6 +1,6 @@
 module github.com/krok-o/operator
 
-go 1.19
+go 1.22.4
 
 require (
 	github.com/fluxcd/source-controller/api v0.30.0

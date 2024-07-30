@@ -3,11 +3,8 @@ kind: Kustomization
 resources:
 - manager.yaml
 images:
-- name: controller
-  newName: controller
-  newTag: latest
 - name: krok-o/krok-controller
-  newName: localhost:5001/krok-o/krok-controller
-  newTag: v0.0.1
+  newName: ghcr.io/krok-o/krok-controller
+  newTag: v0.8.0
 patchesStrategicMerge:
 - environment_values_patch.yaml
